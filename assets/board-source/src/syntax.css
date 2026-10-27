@@ -1,0 +1,15 @@
+.source-code, .inline-source, .syntax-code { color: #334155; tab-size: 2; }
+.hljs-comment, .hljs-quote { color: #63736c; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal { color: #9f3f96; }
+.hljs-string, .hljs-doctag, .hljs-regexp { color: #277545; }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: #b15a22; }
+.hljs-title, .hljs-section { color: #215bbb; }
+.hljs-type, .hljs-built_in, .hljs-title.class_ { color: #087f8c; }
+.hljs-attr, .hljs-property, .hljs-attribute { color: #805b13; }
+.hljs-variable, .hljs-template-variable, .hljs-params { color: #334155; }
+.hljs-tag, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: #ab3c49; }
+.hljs-meta { color: #65728f; }
+.hljs-addition { color: #277545; background: #ecfdf3; }
+.hljs-deletion { color: #ab3c49; background: #fff1f2; }
+.source-symbol.is-selected > span { color: inherit; }
+.source-line.is-target { box-shadow: inset 3px 0 #3b82f6; }

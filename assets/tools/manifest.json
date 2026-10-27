@@ -1,0 +1,9 @@
+{
+  "tool": "scc",
+  "version": "4.1.0",
+  "platform": "darwin-arm64",
+  "source": "https://github.com/boyter/scc/releases/download/v4.1.0/scc_Darwin_arm64.tar.gz",
+  "archiveSha256": "7201c7aa4aace058d43308462cba72adb18f6094c08c0741727455976d0a0747",
+  "executableSha256": "84967748ef1cff481867adff389d0ec138542d30508f1b3aa1186e2bf83de9f0",
+  "license": "darwin-arm64/LICENSE"
+}

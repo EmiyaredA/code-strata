@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "description": "Ground truth from fixture source, not generated from Joern output. Runtime dispatch is deliberately not asserted.",
+  "languages": {
+    "javascript": {
+      "source": "worker.ts",
+      "calls": [
+        {
+          "case": "direct-import-control",
+          "source": "direct.ts",
+          "target": "createKey",
+          "file": "helpers.ts"
+        },
+        {
+          "case": "alias-reexport",
+          "target": "canUpload",
+          "file": "helpers.ts"
+        },
+        {
+          "case": "direct-call",
+          "target": "createKey",
+          "file": "helpers.ts"
+        },
+        {
+          "case": "constructor",
+          "target": "<init>",
+          "file": "helpers.ts",
+          "allowNames": [
+            "<init>",
+            "Store",
+            "<constructor>"
+          ]
+        },
+        {
+          "case": "method-call",
+          "target": "put",
+          "file": "helpers.ts"
+        },
+        {
+          "case": "nested-call",
+          "target": "nested",
+          "file": "worker.ts"
+        },
+        {
+          "case": "recursion",
+          "target": "recurse",
+          "file": "worker.ts"
+        },
+        {
+          "case": "unicode-multiline",
+          "target": "createKey",
+          "file": "helpers.ts"
+        },
+        {
+          "case": "finally",
+          "target": "cleanup",
+          "file": "worker.ts"
+        },
+        {
+          "case": "generator",
+          "target": "createKey",
+          "file": "helpers.ts"
+        }
+      ],
+      "unresolved": [
+        "unresolved-callback",
+        "dynamic-target"
+      ],
+      "variables": [
+        "allowed",
+        "name",
+        "key",
+        "store",
+        "url",
+        "captured",
+        "中文",
+        "unicodeKey",
+        "total"
+      ],
+      "logic": [
+        "loop",
+        "early-return",
+        "finally",
+        "async",
+        "generator"
+      ]
+    },
+    "python": {
+      "source": "worker.py",
+      "calls": [
+        {
+          "case": "direct-import-control",
+          "source": "direct.py",
+          "target": "create_key",
+          "file": "helpers.py"
+        },
+        {
+          "case": "alias-reexport",
+          "target": "can_upload",
+          "file": "helpers.py"
+        },
+        {
+          "case": "direct-call",
+          "target": "create_key",
+          "file": "helpers.py"
+        },
+        {
+          "case": "constructor",
+          "target": "__init__",
+          "file": "helpers.py",
+          "allowNames": [
+            "__init__",
+            "Store",
+            "<init>"
+          ]
+        },
+        {
+          "case": "method-call",
+          "target": "put",
+          "file": "helpers.py"
+        },
+        {
+          "case": "nested-call",
+          "target": "nested",
+          "file": "worker.py"
+        },
+        {
+          "case": "recursion",
+          "target": "recurse",
+          "file": "worker.py"
+        },
+        {
+          "case": "unicode-multiline",
+          "target": "create_key",
+          "file": "helpers.py"
+        },
+        {
+          "case": "finally",
+          "target": "cleanup",
+          "file": "worker.py"
+        },
+        {
+          "case": "generator",
+          "target": "create_key",
+          "file": "helpers.py"
+        }
+      ],
+      "unresolved": [
+        "unresolved-callback",
+        "dynamic-target"
+      ],
+      "variables": [
+        "allowed",
+        "name",
+        "key",
+        "store",
+        "url",
+        "中文",
+        "unicode_key",
+        "total",
+        "state"
+      ],
+      "logic": [
+        "loop",
+        "loop-else",
+        "early-return",
+        "finally",
+        "async",
+        "generator",
+        "global",
+        "nonlocal"
+      ]
+    }
+  }
+}

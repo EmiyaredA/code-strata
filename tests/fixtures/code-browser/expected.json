@@ -1,0 +1,16 @@
+{
+  "javascript": {
+    "resolved": {"canUpload": "permit", "Store": "constructor", "recursive": "recursive", "callback": "callback"},
+    "unresolved": ["handler", "Promise.resolve"],
+    "logic": ["IfStatement", "ForStatement", "TryStatement", "ReturnStatement", "ThrowStatement"],
+    "variables": ["shadowing", "closure", "destructuring", "multiple-assignment", "readwrite", "unicode"]
+  },
+  "python": {
+    "resolved": {"can_upload": "permit", "Store": "__init__", "recursive": "recursive"},
+    "unresolved": ["handler", "store.put"],
+    "logic": ["If", "For", "Try", "Return", "Raise"],
+    "variables": ["shadowing", "closure", "global", "nonlocal", "comprehension", "match", "multiple-assignment", "unicode"]
+  },
+  "limits": {"nodesPerPage": 100, "relationsPerPage": 300},
+  "meaning": "结构化语句与符号引用；不验证运行时路径或到达定义"
+}

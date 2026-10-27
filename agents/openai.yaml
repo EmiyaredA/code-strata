@@ -1,0 +1,4 @@
+interface:
+  display_name: "代码架构看板"
+  short_description: "盘点技术栈与代码规模，联动浏览架构和源码，查看可复核的引用依据。"
+  default_prompt: "使用 $code-architecture 打开当前项目，盘点技术栈、代码规模和解析范围，打开可联动浏览的架构看板。"

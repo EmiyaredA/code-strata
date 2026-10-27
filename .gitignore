@@ -218,3 +218,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Skill development dependencies and local validation artifacts
+node_modules/
+.local/
+
+# Offline runtime bundles and bundled tool licenses belong in the repository.
+!/assets/board/
+!/assets/board/**
+!/scripts/parse-js.cjs
+!/scripts/parse-js.cjs.LEGAL.txt
