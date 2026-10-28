@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 
 // Keep focus on the trigger so the enclosing dialog retains its keyboard trap.
-export function SelectMenu({ label, value, options, onChange }) {
+export function SelectMenu({ label, value, options, onChange, disabled = false, className = "", popupClassName = "", align = "start" }) {
   const id = useId();
   const trigger = useRef(null);
   const popup = useRef(null);
@@ -11,6 +11,7 @@ export function SelectMenu({ label, value, options, onChange }) {
   const [active, setActive] = useState(0);
   const [position, setPosition] = useState(null);
   const selected = options.find((option) => option.value === value) || options[0];
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
   function show() {
     setActive(Math.max(0, options.findIndex((option) => option.value === value)));
     setOpen(true);
@@ -24,13 +25,13 @@ export function SelectMenu({ label, value, options, onChange }) {
     if (!open) return;
     function place() {
       const rect = trigger.current.getBoundingClientRect();
-      const desired = Math.min(248, options.length * 36 + 8);
+      const desired = Math.min(248, options.length * 36 + 12);
       const below = innerHeight - rect.bottom - 12;
       const above = rect.top - 12;
       const upward = below < desired && above > below;
       const height = Math.min(desired, Math.max(64, upward ? above : below));
       const width = Math.min(Math.max(rect.width, 220), innerWidth - 24);
-      setPosition({ left: Math.max(12, Math.min(rect.left, innerWidth - width - 12)),
+      setPosition({ left: Math.max(12, Math.min(align === "end" ? rect.right - width : rect.left, innerWidth - width - 12)),
         top: upward ? Math.max(12, rect.top - height - 5) : rect.bottom + 5,
         width, maxHeight: height });
     }
@@ -38,7 +39,7 @@ export function SelectMenu({ label, value, options, onChange }) {
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
     return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
-  }, [open, options.length]);
+  }, [open, options.length, align]);
   useEffect(() => {
     if (!open) return;
     function outside(event) {
@@ -49,7 +50,7 @@ export function SelectMenu({ label, value, options, onChange }) {
   }, [open]);
   useEffect(() => {
     if (open) popup.current?.querySelector(`[id="${CSS.escape(`${id}-${active}`)}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [open, active, id]);
+  }, [open, active, id, !!position]);
   function keyboard(event) {
     if (event.key === "Escape" && open) {
       event.preventDefault(); event.stopPropagation(); setOpen(false); return;
@@ -73,21 +74,21 @@ export function SelectMenu({ label, value, options, onChange }) {
     }
   }
   return <>
-    <button ref={trigger} type="button" role="combobox" className="stats-select-trigger" aria-label={label}
-      aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? id : undefined}
+    <button ref={trigger} type="button" role="combobox" className={`stats-select-trigger ${className}`} aria-label={label}
+      aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? id : undefined} disabled={disabled}
       aria-activedescendant={open ? `${id}-${active}` : undefined}
       onClick={() => open ? setOpen(false) : show()} onKeyDown={keyboard}
       onBlur={() => setOpen(false)}>
-      <span>{selected?.label}</span>{selected?.detail != null && <small>{selected.detail}</small>}<ChevronDown size={14} />
+      <span>{selected?.icon}{selected?.label}</span>{selected?.detail != null && <small>{selected.detail}</small>}<ChevronDown size={14} />
     </button>
     {open && position && createPortal(<div ref={popup} id={id} role="listbox" aria-label={label}
-      className="stats-select-popup" style={position} onMouseDown={(event) => event.preventDefault()}>
+      className={`stats-select-popup ${popupClassName}`} style={position} onMouseDown={(event) => event.preventDefault()}>
       {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option"
         aria-selected={option.value === value} className={index === active ? "is-active" : ""}
         onPointerMove={() => setActive(index)} onClick={() => choose(option)}>
-        <span>{option.label}</span>{option.detail != null && <small>{option.detail}</small>}
+        <span>{option.icon}{option.label}</span>{option.detail != null && <small>{option.detail}</small>}
         {option.value === value ? <Check size={14} /> : <span className="stats-select-check-space" />}
       </div>)}
-    </div>, document.body)}
+    </div>, trigger.current?.closest('[role="dialog"]') || document.body)}
   </>;
 }

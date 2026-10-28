@@ -15,6 +15,9 @@ import {
   Info,
   RefreshCw,
   LoaderCircle,
+  Settings,
+  PanelRightOpen,
+  PanelRightClose,
 } from "lucide-react";
 import { demo } from "./demo.js";
 import { parents, searchProject, selectionInfo } from "./model.js";
@@ -26,15 +29,22 @@ import {
 } from "./InventoryPanels.jsx";
 import { ArchitectureGraph } from "./Graph.jsx";
 import { CodeBrowser } from "./CodeBrowser.jsx";
+import { CodeSidebar } from "./CodeSidebar.jsx";
+import "./workspace-toolbar.css";
 import {usePanelResize, PanelResize} from "./PanelResize.jsx";
 import { highlightedLines } from "./syntax.js";
 import { SyntaxText } from "./SyntaxCode.jsx";
 import { Tree } from "./CodeTree.jsx";
+import { AgentSettings } from "./AgentSettings.jsx";
+import { ExplorationWorkspace } from "./ExplorationWorkspace.jsx";
+import { useChatDrawer } from "./ChatDrawer.jsx";
+import { readingContext, locateInMap } from "./reading-navigation.js";
+import { apiFetch } from './api-fetch.js';
 import "@xyflow/react/dist/style.css";
 const token = () =>
   document.querySelector('meta[name="architecture-token"]')?.content || "";
 async function requestProject(body) {
-  const response = await fetch("/api/project", {
+  const response = await apiFetch("/api/project", {
     method: body ? "POST" : "GET",
     headers: {
       "X-Architecture-Token": token(),
@@ -125,7 +135,7 @@ function ProjectDialog({ current, onLoad, onClose }) {
     setPicking(true);
     setError("");
     try {
-      const response = await fetch("/api/select-directory", {
+      const response = await apiFetch("/api/select-directory", {
         method: "POST",
         headers: {
           "X-Architecture-Token": token(),
@@ -243,7 +253,7 @@ function ProjectDialog({ current, onLoad, onClose }) {
     </Dialog>
   );
 }
-function SourceDialog({ file, line, onClose }) {
+function SourceDialog({ file, line, onClose, onPage, onLocate, locating, locateError }) {
   const active = useRef(null);
   const syntax = useMemo(() => highlightedLines(file.content, file.language, file.path), [file.content, file.language, file.path]);
   useEffect(() => {
@@ -259,7 +269,12 @@ function SourceDialog({ file, line, onClose }) {
             ? "扫描快照中的证据片段 · 只读"
             : "扫描快照中的源码 · 只读"}
         </span>
+        {onLocate && <button className="text-button" disabled={locating} onClick={onLocate}>{locating ? "正在定位…" : "在代码地图中定位"}</button>}
+        {onPage && <><span>第 {(file.lineOffset || 0) + 1}–{file.endLine} 行 / 共 {file.totalLines} 行</span>
+          <button className="text-button" disabled={!file.lineOffset} onClick={() => onPage(Math.max(1, file.lineOffset - 299))}>上一段</button>
+          <button className="text-button" disabled={file.endLine >= file.totalLines} onClick={() => onPage(file.endLine + 1)}>下一段</button></>}
       </div>
+      {locateError && <p className="source-locate-error" role="alert">{locateError}</p>}
       <div className="source-code" tabIndex={0} aria-label="源代码">
         {file.content.split("\n").map((text, i) => (
           <div
@@ -278,7 +293,14 @@ function SourceDialog({ file, line, onClose }) {
   );
 }
 export function App() {
-  const architectureSplit = usePanelResize("architecture");
+  const architectureSplit = usePanelResize("architecture-left", 300, "left");
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try { const saved = localStorage.getItem("code-strata:sidebar-open"); return saved == null ? window.innerWidth >= 900 : saved !== "false"; } catch { return true; }
+  });
+  function toggleSidebar() {
+    setSidebarOpen(value => { const next = !value; try { localStorage.setItem("code-strata:sidebar-open", String(next)); } catch {} return next; });
+  }
+  const chatDrawer = useChatDrawer();
   const [data, setData] = useState(demo),
     [selection, setSelection] = useState({ kind: "group", id: "save" }),
     [allTree, setAllTree] = useState(false),
@@ -287,6 +309,33 @@ export function App() {
     );
   const [inspector, setInspector] = useState(null);
   const [codeActive, setCodeActive] = useState(false), [codeEntry, setCodeEntry] = useState(null);
+  const [workspace, setWorkspace] = useState("map"), [exploreOpened, setExploreOpened] = useState(false);
+  const exploreActive = workspace === "reading";
+  const [readingEntry, setReadingEntry] = useState(null);
+  const locationRequest = useRef(null), liveData = useRef(data);
+  liveData.current = data;
+  useEffect(() => () => locationRequest.current?.abort(), [data.project.root, data.snapshot.id]);
+  function explainCode(target) {
+    const context = readingContext(data, target);
+    if (!context) return;
+    setReadingEntry({ ...context, serial: ++entrySerial.current });
+    setExploreOpened(true);
+    setWorkspace("reading");
+    chatDrawer.setOpen(true);
+  }
+  async function locateCode(target, isCurrent = () => true) {
+    locationRequest.current?.abort();
+    const controller = new AbortController();
+    locationRequest.current = controller;
+    const at = data;
+    const located = await locateInMap(at, target, undefined, controller.signal);
+    if (controller.signal.aborted || liveData.current !== at || !isCurrent()) return false;
+    if (located.error) throw new Error(located.error);
+    setCodeEntry({ ...located.entry, notice: located.notice, serial: ++entrySerial.current });
+    setCodeActive(true);
+    setWorkspace("map");
+    return true;
+  }
   const entrySerial = useRef(0);
   function browseCode(target = selection) {
     if (!data.project.root) return;
@@ -294,6 +343,7 @@ export function App() {
     const path = target?.kind === "file" ? target.id : group?.files[0] || info.files[0];
     setCodeEntry({serial: ++entrySerial.current, view: "files", focusId: path, path, groupId: group?.id, title: group?.title || path?.split("/").at(-1) || "文件依赖"});
     setCodeActive(true);
+    setWorkspace("map");
   }
   const [modal, setModal] = useState(null),
     [query, setQuery] = useState(""),
@@ -312,9 +362,11 @@ export function App() {
   function load(next) {
     const sameProject = data.project.root && data.project.root === next.project.root;
     setData(next);
-    if (!sameProject) { setCodeActive(false); setCodeEntry(null); }
+    if (!sameProject) { setCodeActive(false); setCodeEntry(null); setWorkspace("map"); setReadingEntry(null); }
     setInspector(null);
-    const first = next.groups.find((g) => g.files.length),
+    const degrees = new Map();
+    for (const edge of next.edges) { degrees.set(edge.source,(degrees.get(edge.source)||0)+1); degrees.set(edge.target,(degrees.get(edge.target)||0)+1); }
+    const first = [...next.groups].filter(g=>g.files.length).sort((a,b)=>(degrees.get(b.id)||0)-(degrees.get(a.id)||0))[0],
       s = first
         ? { kind: "group", id: first.id }
         : inventoryFiles(next)[0]
@@ -424,8 +476,20 @@ export function App() {
       setBusy(false);
     }
   }
+  function switchWorkspace(next) {
+    setWorkspace(next);
+    if (next === "reading") { setExploreOpened(true); chatDrawer.setOpen(true); }
+    requestAnimationFrame(() => {
+      [...document.querySelectorAll('.workspace-switcher button[aria-pressed="true"]')]
+        .find(button => button.getClientRects().length)?.focus({ preventScroll: true });
+    });
+  }
+  const workspaceNavigation = <nav className="workspace-switcher" aria-label="阅读工作区">
+    <button aria-pressed={!exploreActive} onClick={() => switchWorkspace("map")}>代码地图</button>
+    <button aria-pressed={exploreActive} aria-label="功能解读，AI 辅助" disabled={!data.project.root} onClick={() => switchWorkspace("reading")}>功能解读<span className="workspace-ai-badge" aria-hidden="true">AI</span></button>
+  </nav>;
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${exploreOpened && chatDrawer.open && !chatDrawer.overlay ? "has-chat-drawer" : ""}`} style={{"--chat-drawer-width": `${chatDrawer.width}px`}}>
       <header className="topbar">
         <div className="brand">
           <span className="brand-icon">
@@ -526,6 +590,10 @@ export function App() {
             <FolderOpen size={15} />
             打开项目
           </button>
+          <button className="text-button topbar-chat-toggle" data-chat-opener aria-label={exploreOpened && chatDrawer.open ? "收起会话" : "展开会话"} aria-expanded={exploreOpened && chatDrawer.open} onClick={() => { setExploreOpened(true); chatDrawer.setOpen(!chatDrawer.open); }}>{exploreOpened && chatDrawer.open ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}会话</button>
+          <button className="icon-button" aria-label="打开设置" title="设置" onClick={() => setModal({ kind: "settings" })}>
+            <Settings size={17} />
+          </button>
         </div>
       </header>
       <ProjectOverview
@@ -533,53 +601,8 @@ export function App() {
         inspector={inspector}
         onOpen={openInspection}
       />
-      <main className="board-layout" ref={architectureSplit.ref} style={{...architectureSplit.style,...(codeActive?{display:"none"}:{})}}>
-        <section className="architecture-panel">
-          <div className="panel-header">
-            <div className="section-title">
-              <div className="architecture-entry"><h2>系统架构</h2><button className="text-button browse-code-button" disabled={!data.project.root} title={data.project.root ? "浏览所选分组或文件" : "打开本地项目后浏览代码"} onClick={() => browseCode()}>浏览文件 <ChevronRight size={14}/></button></div>
-            </div>
-            <div className="panel-actions">
-              {!data.coverage && data.diagnostics.length > 0 && (
-                <button
-                  className="text-button diagnostics-button"
-                  onClick={() => setModal({ kind: "diagnostics" })}
-                >
-                  <Info size={14} />
-                  {data.diagnostics.length} 项扫描说明
-                </button>
-              )}
-              {data.project.root && (
-                <button
-                  className="icon-button"
-                  aria-label="重新扫描项目"
-                  title="重新扫描项目"
-                  onClick={refresh}
-                  disabled={busy}
-                >
-                  <RefreshCw size={15} className={busy ? "spin" : ""} />
-                </button>
-              )}
-            </div>
-          </div>
-          <ReactFlowProvider>
-            <ArchitectureGraph
-              data={data}
-              selection={selection}
-              info={info}
-              onSelect={select}
-              onEnter={browseCode}
-            />
-          </ReactFlowProvider>
-          <footer className="graph-footer">
-            <span>
-              <span className="legend-line" />
-              静态代码引用
-            </span>
-            <span>{data.groups.length} 个分组</span>
-          </footer>
-        </section>
-        <aside className="code-panel" ref={panelRef}>
+      <main className={`board-layout has-left-panel ${!architectureSplit.bounds.enabled ? "is-sidebar-overlay" : ""} ${exploreActive ? "is-reading" : ""}`} ref={architectureSplit.ref} style={{...architectureSplit.style,...(!sidebarOpen || !architectureSplit.bounds.enabled ? {gridTemplateColumns:"36px minmax(0,1fr)"} : {}),...(codeActive && !exploreActive ? {display:"none"}:{})}}>
+        <CodeSidebar id="project-code-sidebar" open={sidebarOpen} onToggle={toggleSidebar} overlay={!architectureSplit.bounds.enabled} panelRef={panelRef} hint={data.project.sample ? "交互示例。打开本地项目后查看实际源码结构。" : undefined} actions={!inspector && <button className="text-button" onClick={toggleTree}>{allTree ? "关联路径" : "完整树"}</button>}>
           {inspector && (
             <InspectionPanel
               data={data}
@@ -593,15 +616,6 @@ export function App() {
             className="code-tree-content"
             style={{ display: inspector ? "none" : "flex" }}
           >
-            <div className="panel-header">
-              <div className="section-title">
-                <Link2 size={15} className="accent" />
-                <h2>代码结构</h2>
-              </div>
-              <button className="text-button" onClick={toggleTree}>
-                {allTree ? "返回关联路径" : "查看完整树"}
-              </button>
-            </div>
             <Tree
               data={data}
               expanded={expanded}
@@ -611,9 +625,7 @@ export function App() {
               onFile={(id) => select({ kind: "file", id })}
             />
             {selection?.kind === "group" && (
-              <ModuleStatistics
-                group={info.groups[0]}
-              />
+              <><ModuleStatistics group={info.groups[0]}/><div className="map-context-action"><button className="text-button" disabled={!data.project.root} onClick={() => explainCode(selection)}>解读这段代码</button></div></>
             )}
             {selection?.kind === "edge" && (
               <section className="selection-details" aria-live="polite">
@@ -647,6 +659,7 @@ export function App() {
             )}
             {selection?.kind === "file" && (
               <footer className="code-source-action">
+                <button className="text-button" disabled={!data.project.root} onClick={() => explainCode(selection)}>解读这段代码</button>
                 {!info.groups.length && (
                   <span className="muted">架构图中暂无对应模块</span>
                 )}
@@ -665,17 +678,60 @@ export function App() {
               </footer>
             )}
           </div>
-        </aside>
-        <PanelResize split={architectureSplit}/>
+        </CodeSidebar>
+        <section className="architecture-panel" style={exploreActive ? {display:"none"} : undefined}>
+          <ReactFlowProvider>
+            <ArchitectureGraph
+              data={data}
+              selection={selection}
+              info={info}
+              onSelect={select}
+              onEnter={browseCode}
+              navigation={workspaceNavigation}
+              heading={<div className="section-title">
+              <div className="architecture-entry"><h2>模块依赖</h2><button className="text-button browse-code-button" disabled={!data.project.root} title={data.project.root ? "浏览所选分组或文件" : "打开本地项目后浏览代码"} onClick={() => browseCode()}>浏览文件 <ChevronRight size={14}/></button></div>
+              </div>}
+              actions={<>
+              {!data.coverage && data.diagnostics.length > 0 && (
+                <button
+                  className="text-button diagnostics-button"
+                  onClick={() => setModal({ kind: "diagnostics" })}
+                >
+                  <Info size={14} />
+                  {data.diagnostics.length} 项扫描说明
+                </button>
+              )}
+              {data.project.root && (
+                <button
+                  className="icon-button"
+                  aria-label="重新扫描项目"
+                  title="重新扫描项目"
+                  onClick={refresh}
+                  disabled={busy}
+                >
+                  <RefreshCw size={15} className={busy ? "spin" : ""} />
+                </button>
+              )}
+              </>}
+            />
+          </ReactFlowProvider>
+          <footer className="graph-footer">
+            <span>
+              <span className="legend-line" />
+              静态代码引用
+            </span>
+            <span>{data.groups.length} 个分组</span>
+          </footer>
+        </section>
+        {exploreOpened && <ExplorationWorkspace navigation={workspaceNavigation} data={data} entry={readingEntry} active={exploreActive} drawer={chatDrawer} SourceDialog={SourceDialog} onLocate={locateCode} onSettings={() => setModal({kind: "settings"})}/>}
+
+        {sidebarOpen && architectureSplit.bounds.enabled && <PanelResize split={architectureSplit}/>}
       </main>
-      {codeEntry && <CodeBrowser data={data} entry={codeEntry} active={codeActive} onArchitecture={() => setCodeActive(false)}/>}
-      <div className="app-status" role="status" style={codeActive ? {display:"none"} : undefined}>
+      {codeEntry && <CodeBrowser navigation={workspaceNavigation} data={data} entry={codeEntry} active={codeActive && !exploreActive} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} onExplain={explainCode} onArchitecture={() => setCodeActive(false)}/>}
+      {notice && <div className="app-status" role="status" style={codeActive || exploreActive ? {display:"none"} : undefined}>
         <Info size={13} />
-        {notice ||
-          (data.project.sample
-            ? "交互示例。打开本地项目后查看实际源码结构。"
-            : "代码引用可追溯；动态调用与运行时行为不在本次扫描范围内。")}
-      </div>
+        {notice}
+      </div>}
       {modal?.kind === "project" && (
         <ProjectDialog
           current={data}
@@ -683,6 +739,7 @@ export function App() {
           onClose={() => setModal(null)}
         />
       )}
+      {modal?.kind === "settings" && <AgentSettings Dialog={Dialog} onClose={() => setModal(null)} />}
       {statisticsView && (
         <Dialog
           title="工程统计"

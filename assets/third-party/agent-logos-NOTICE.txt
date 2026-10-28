@@ -1,0 +1,10 @@
+Agent identification artwork
+
+The Codex, OpenCode, DeepSeek, Claude Code and Pi SVG assets were copied
+unchanged from apps/web/public/agent-icons/ in the user's open-design
+reference repository. OpenDesign is distributed under Apache License 2.0;
+its license is included in open-design-LICENSE.txt.
+
+These marks identify their respective third-party CLI integrations.
+Brand names and trademarks remain the property of their respective owners.
+DeepSeek Harness uses the DeepSeek vendor mark, matching the reference app.

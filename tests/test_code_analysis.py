@@ -157,6 +157,43 @@ class CodeAnalysisTests(unittest.TestCase):
             kinds={n['nodeType'] for n in logic['nodes']}
             self.assertTrue(set(expected[language]['logic']).issubset(kinds))
 
+    def test_conditional_callable_signature_is_not_a_resolved_runtime_target(self):
+        files=[dict(id='choice.ts',language='typescript',parseStatus='parsed',captureStatus='captured',content='function a() {} function b() {} const f = flag ? a : b; f();')]
+        model=run_language(dict(files=files),'javascript')
+        call=next(n for n in model['nodes'] if n['kind']=='call')
+        self.assertNotEqual(call['status'],'resolved')
+
+    def test_js_pattern_assignment_and_iteration_writes(self):
+        text='let target = 0; [target] = items; ({value:target} = object); for(target of items) { console.log(target); }'
+        model=run_language(dict(files=[dict(id='writes.ts',language='typescript',parseStatus='parsed',captureStatus='captured',content=text)]),'javascript')
+        refs=[n for n in model['nodes'] if n['kind']=='reference' and n['name']=='target']
+        self.assertEqual([n['access'] for n in refs],['write','write','write','read'])
+
+    def test_ts_imported_variable_alias_in_shorthand_references_original_binding(self):
+        files=[dict(id='a.ts',content='export const original = 1;',language='typescript',parseStatus='parsed',captureStatus='captured'),dict(id='b.ts',content="import {original as local} from './a'; const item = {local};",language='typescript',parseStatus='parsed',captureStatus='captured')]
+        model=run_language(dict(files=files),'javascript')
+        variable=next(n for n in model['nodes'] if n['kind']=='variable' and n['name']=='original')
+        ref=next(n for n in model['nodes'] if n['kind']=='reference' and n['name']=='local')
+        self.assertEqual(ref['symbolId'],variable['id'])
+
+    def test_symtable_failure_isolated_to_invalid_file(self):
+        model=analyze([dict(id='invalid.py',content='def bad():\n    nonlocal missing\n'),dict(id='valid.py',content='def valid():\n    return 1\n')])
+        self.assertTrue(any(n['name']=='valid' for n in model['nodes']))
+        self.assertTrue(any(d['path']=='invalid.py' for d in model['diagnostics']))
+
+    def test_same_line_python_lambdas_have_distinct_symbol_tables(self):
+        model=analyze([dict(id='lambda.py',content='x = 1\npair = (lambda: x, lambda x: x)\n')])
+        param=next(n for n in model['nodes'] if n['kind']=='parameter' and n['name']=='x')
+        ref=next(n for n in model['nodes'] if n['kind']=='reference' and n['ownerId']==param['ownerId'])
+        self.assertEqual(ref['symbolId'],param['id'])
+
+    @unittest.skipIf(sys.version_info < (3,12),'generic function syntax requires Python 3.12')
+    def test_generic_python_function_global_uses_wrapped_function_scope(self):
+        model=analyze([dict(id='generic.py',content='value=0\ndef update[T]():\n    global value\n    value=1\n    return value\n')])
+        variables=[n for n in model['nodes'] if n['kind']=='variable' and n['name']=='value']
+        self.assertEqual(len(variables),1)
+        self.assertTrue(all(n['symbolId']==variables[0]['id'] for n in model['nodes'] if n['kind']=='reference' and n['name']=='value'))
+
     def test_invalid_python_retains_reason(self):
         result=analyze([dict(id='bad.py',content='def broken(:\n')])
         self.assertTrue(result['diagnostics'])

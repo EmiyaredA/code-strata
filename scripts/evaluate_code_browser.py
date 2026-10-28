@@ -58,7 +58,7 @@ def evaluate(project, output, node=None):
         variable_records=[]
         for n in variables:
             refs=[session.by_id[x] for x in session.references.get(n['id'],[])]
-            variable_records.append(dict(id=n['id'], name=n['name'], kind=n['kind'], definition=source(n), scope=source(session.by_id[n['ownerId']]), references=[dict(access=r['access'],capture=r.get('capture'),**source(r)) for r in refs[:12]], referenceCount=len(refs), reviewStatus='pending',finding=''))
+            variable_records.append(dict(id=n['id'], name=n['name'], kind=n['kind'], definition=source(n), scope=source(session.by_id[n['ownerId']]), references=[dict(name=r['name'],access=r['access'],capture=r.get('capture'),**source(r)) for r in refs[:12]], referenceCount=len(refs), reviewStatus='pending',finding=''))
         audit['languages'][language]=dict(calls=call_records,variables=variable_records)
         functions=[n for n in source_nodes if n['kind'] in FUNCTIONS]
         timings=[]

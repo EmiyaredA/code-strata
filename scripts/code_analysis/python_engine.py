@@ -20,6 +20,7 @@ class Analyzer:
         self.value_targets = {}
         self.aliases = {}
         self.tables = {}
+        self.used_tables = set()
         self.module_names = {}
         self.file_ids = {}
         for path in self.files:
@@ -36,6 +37,8 @@ class Analyzer:
                 self.trees[path] = ast.parse(f['content'], filename=path)
                 self.tables[path] = symtable.symtable(f['content'], path, 'exec')
             except (SyntaxError, ValueError) as exc:
+                self.trees.pop(path, None)
+                self.tables.pop(path, None)
                 self.result['diagnostics'].append(dict(kind='syntax', path=path, line=getattr(exc, 'lineno', 1), message=str(exc)))
         for path, tree in self.trees.items():
             self.path = path
@@ -99,7 +102,15 @@ class Analyzer:
             def kind(t):
                 k = t.get_type()
                 return getattr(k, 'value', k)
-            return next((t for t in table.get_children() if t.get_name() == name and t.get_lineno() == node.lineno and kind(t) == expected), None)
+            def candidates(parent):
+                for child in parent.get_children():
+                    if child.get_name() == name and child.get_lineno() == node.lineno and kind(child) == expected:
+                        yield child
+                    elif kind(child) not in ('function', 'class'):
+                        yield from candidates(child)
+            selected = next((t for t in candidates(table) if t.get_id() not in self.used_tables), None)
+            if selected: self.used_tables.add(selected.get_id())
+            return selected
         return None
 
     def declare(self, scope, name, n, kind='variable'):

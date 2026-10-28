@@ -27,6 +27,7 @@ if __name__ == '__main__':
         if args.focus: request['focusId'] = args.focus
         if args.query: request['text'] = args.query
         model = session.query(request)
-    Path(args.output).write_text(json.dumps(model, ensure_ascii=False), encoding='utf8')
+    with Path(args.output).open('w', encoding='utf8') as stream:
+        json.dump(model, stream, ensure_ascii=False)
     print(json.dumps(dict(output=args.output, status=model['status'], nodes=len(model['nodes']), relations=len(model['relations']), engines=model.get('engines',session.metrics)), ensure_ascii=False))
     raise SystemExit(1 if model['status'] == 'failed' else 0)

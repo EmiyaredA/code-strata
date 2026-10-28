@@ -125,7 +125,8 @@ def scan_project(project, mapping_path=None, node=None, scc=None, work_dir=None,
     with tempfile.TemporaryDirectory(
         prefix="code-architecture-", dir=work_dir or os.environ.get("CODE_ARCHITECTURE_TEST_TMP")
     ) as temporary:
-        entries, configs, originals, notes = capture(root, Path(temporary))
+        preview_files = [] if snapshot_context is not None else None
+        entries, configs, originals, notes = capture(root, Path(temporary), preview_files=preview_files)
         inventory_sources = [x for x in entries if x["category"] != "config"]
         if not inventory_sources:
             raise ValueError("没有发现可盘点的源码文件")
@@ -262,7 +263,8 @@ def scan_project(project, mapping_path=None, node=None, scc=None, work_dir=None,
     # scan JSON and its import/architecture edge semantics stay unchanged.
     if snapshot_context is not None:
         snapshot_context.update(files=files, configs=dict(configs), imports=imports,
-                                runtime=runtime, snapshotId=analysis_hash[:12])
+                                runtime=runtime, snapshotId=analysis_hash[:12],
+                                sourceFiles=[f for f in preview_files if f['id'] not in changed])
     return dict(
         version=1,
         project=dict(name=root.name, root=str(root), sample=False),

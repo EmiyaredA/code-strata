@@ -1,0 +1,50 @@
+.architecture-panel .workspace-canvas-toolbar,
+.explore-canvas .workspace-canvas-toolbar {
+  height: 46px;
+  min-height: 46px;
+  padding-inline: 12px;
+  justify-content: flex-start;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.workspace-canvas-toolbar .workspace-switcher {
+  padding-right: 10px;
+  border-right: 1px solid #e8edf5;
+}
+.workspace-canvas-toolbar > .panel-actions,
+.workspace-canvas-toolbar > .explore-canvas-actions {
+  margin-left: auto;
+  flex: none;
+}
+.workspace-canvas-toolbar > .section-title { flex: none; }
+.workspace-canvas-toolbar .architecture-reading-guide { min-width: 0; }
+.explore-canvas-bar .explore-canvas-title {
+  flex: 1;
+  min-width: 0;
+}
+.explore-canvas-title > svg { flex: none; }
+.explore-canvas-title > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.code-main-panel .code-browser-toolbar { position: relative; }
+.code-main-panel .code-browser-toolbar > .section-title { min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.code-browser-toolbar h2 { flex: none; white-space: nowrap; }
+.code-browser-toolbar .panel-actions { gap: 6px; }
+.code-search-trigger,.code-search-clear { display: inline-flex; align-items: center; justify-content: center; flex: none; border: 0; padding: 0; background: transparent; color: #8191a9; }
+.code-search.has-value .code-search-trigger { color: #4266e8; }
+.code-search-results { z-index: 60; }
+@container code-panel (max-width: 850px) {
+  .code-browser-toolbar .code-scope-label { display: none; }
+  .code-browser-toolbar .graph-function-picker { width: 110px; max-width: 110px; }
+}
+@container code-panel (max-width: 650px) {
+  .code-browser-toolbar .graph-function-picker { display: none; }
+  .code-browser-toolbar .enter-logic-button > span { display: none; }
+  .code-browser-toolbar .code-search { width: 28px; flex-basis: 28px; padding: 5px 6px; }
+  .code-browser-toolbar .code-search:not(.is-expanded) input,
+  .code-browser-toolbar .code-search:not(.is-expanded) .code-search-clear { display: none; }
+  .code-browser-toolbar .code-search.is-expanded { position: absolute; right: 12px; top: 8px; width: min(260px, calc(100% - 190px)); z-index: 10; }
+}

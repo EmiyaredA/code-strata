@@ -150,10 +150,25 @@ else {
   }
   const imported = new Map((input.imports || []).map((r) => [r.from + "\0" + r.specifier, r.to]));
   for (const [key, roots] of groups) {
+    let accessOf = function(identifier) {
+      let child = identifier, parent = child.parent;
+      while (parent && (ts.isParenthesizedExpression(parent) || ts.isArrayLiteralExpression(parent) || ts.isObjectLiteralExpression(parent) || ts.isSpreadElement(parent) || ts.isSpreadAssignment(parent) || ts.isShorthandPropertyAssignment(parent) || ts.isPropertyAssignment(parent) && parent.initializer === child)) {
+        child = parent;
+        parent = parent.parent;
+      }
+      if (parent && (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) && parent.initializer === child) return "write";
+      if (parent && ts.isBinaryExpression(parent) && parent.left === child && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment) return parent.operatorToken.kind === ts.SyntaxKind.EqualsToken ? "write" : "readwrite";
+      if (parent && (ts.isPostfixUnaryExpression(parent) || ts.isPrefixUnaryExpression(parent)) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(parent.operator)) return "readwrite";
+      return "read";
+    };
     let trackWrites = function(n) {
       if (ts.isBinaryExpression(n) && n.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && n.operatorToken.kind <= ts.SyntaxKind.LastAssignment) {
         const s = checker.getSymbolAtLocation(n.left);
         if (s) rebound.add(s);
+      }
+      if (ts.isIdentifier(n) && accessOf(n) !== "read") {
+        const symbol = checker.getSymbolAtLocation(n);
+        if (symbol) rebound.add(symbol);
       }
       ts.forEachChild(n, trackWrites);
     }, symbolAt = function(n, follow = true) {
@@ -166,6 +181,7 @@ else {
       }
     }, mappedDeclaration = function(s, callable = false) {
       if (!s) return null;
+      if (s.flags & ts.SymbolFlags.Alias) { try {s=checker.getAliasedSymbol(s);} catch {return null;} }
       for (const d of [s.valueDeclaration, ...s.declarations || []].filter(Boolean)) {
         if (callable && ts.isVariableDeclaration(d) && d.initializer && isFunction(d.initializer)) return declarationIds.get(d.initializer);
         const id = declarationIds.get(d) || declarationIds.get(d.name);
@@ -183,10 +199,14 @@ else {
           const rawSymbol = symbolAt(n.expression, false);
           const typeOnly = rawSymbol?.declarations?.some((d) => ts.isImportSpecifier(d) && d.isTypeOnly || ts.isImportClause(d) && d.isTypeOnly || ts.isImportSpecifier(d) && d.parent.parent.isTypeOnly);
           const symbol = typeOnly ? null : symbolAt(n.expression);
-          let target = mappedDeclaration(symbol, true);
+          let target = mappedDeclaration(symbol, true), signatureOnly = false;
           try {
             const signature = checker.getResolvedSignature(n), d = signature?.declaration;
-            if (!typeOnly && d && isFunction(d)) target = declarationIds.get(d) || target;
+            if (!typeOnly && d && isFunction(d)) {
+              const inferred = declarationIds.get(d);
+              if (inferred && !target) signatureOnly = true;
+              target = inferred || target;
+            }
           } catch {
           }
           if (ts.isNewExpression(n) && nodes.get(target)?.kind === "class") {
@@ -194,14 +214,16 @@ else {
           }
           const dynamic = ts.isElementAccessExpression(n.expression) || ts.isPropertyAccessExpression(n.expression) && n.expression.expression.kind !== ts.SyntaxKind.ThisKeyword && !symbol?.declarations?.some((d) => ts.isFunctionDeclaration(d) || ts.isMethodDeclaration(d) || ts.isVariableDeclaration(d));
           const mutable = rebound.has(symbol) || symbol?.declarations?.some((d) => ts.isVariableDeclaration(d) && !(d.parent.flags & ts.NodeFlags.Const));
+          const indirectValue = symbol?.declarations?.some((d) => ts.isVariableDeclaration(d) && d.initializer && !isFunction(d.initializer));
+          const complexExpression = !ts.isIdentifier(n.expression) && !ts.isPropertyAccessExpression(n.expression) && !isFunction(n.expression);
           const decorated = symbol?.declarations?.some((d) => ts.canHaveDecorators(d) && ts.getDecorators(d)?.length);
           const classOnly = nodes.get(target)?.kind === "class";
-          let status = target ? classOnly || dynamic || decorated || mutable || ts.isPropertyAccessExpression(n.expression) ? "candidate" : "resolved" : "unresolved";
-          if (target && !decorated && !mutable && ts.isPropertyAccessExpression(n.expression)) {
+          let status = target ? classOnly || signatureOnly || dynamic || decorated || mutable || indirectValue || complexExpression || ts.isPropertyAccessExpression(n.expression) ? "candidate" : "resolved" : "unresolved";
+          if (target && !signatureOnly && !decorated && !mutable && !indirectValue && ts.isPropertyAccessExpression(n.expression)) {
             const base = symbolAt(n.expression.expression, false);
             if (base?.declarations?.some((d) => ts.isNamespaceImport(d)) || symbol?.declarations?.some((d) => ts.isMethodDeclaration(d) && ts.isObjectLiteralExpression(d.parent))) status = "resolved";
           }
-          const obj = add("call", label, n, owner, { functionId, targetId: target || null, status, reason: typeOnly ? "仅类型导入不建立运行时调用目标" : !target ? "仅有类型签名、外部依赖或动态表达式，未定位到源码实现" : status === "candidate" ? "源码声明可定位；属性派发、装饰器、重赋值或构造实现仍可能变化" : "由捕获源码中的符号及调用签名定位" });
+          const obj = add("call", label, n, owner, { functionId, targetId: target || null, status, reason: typeOnly ? "仅类型导入不建立运行时调用目标" : !target ? "仅有类型签名、外部依赖或动态表达式，未定位到源码实现" : signatureOnly ? "仅调用签名提供候选声明；实际函数值未解析" : status === "candidate" ? "源码声明可定位；属性派发、装饰器、间接初始化、重赋值或构造实现仍可能变化" : "由捕获源码中的符号及调用签名定位" });
           if (target) edge("calls", functionId || owner, target, { siteId: obj.id, status, path: obj.path, range: obj.range });
         }
       }
@@ -220,9 +242,7 @@ else {
         if (!definition && !propertyName && !typeOnly) {
           let symbol = ts.isShorthandPropertyAssignment(parent) ? checker.getShorthandAssignmentValueSymbol(parent) : symbolAt(n);
           const target = mappedDeclaration(symbol);
-          const write = ts.isBinaryExpression(parent) && parent.left === n && parent.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && parent.operatorToken.kind <= ts.SyntaxKind.LastAssignment;
-          const rw = write && parent.operatorToken.kind !== ts.SyntaxKind.EqualsToken || (ts.isPostfixUnaryExpression(parent) || ts.isPrefixUnaryExpression(parent)) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(parent.operator);
-          const access = rw ? "readwrite" : write ? "write" : "read";
+          const access = accessOf(n);
           const variable = nodes.get(target);
           const obj = add("reference", n.text, n, owner, { functionId, symbolId: target, access, capture: !!(variable?.functionId && variable.functionId !== functionId), status: target ? "resolved" : "unresolved" });
           if (target) edge("references", obj.id, target, { access, capture: obj.capture });

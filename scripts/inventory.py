@@ -152,7 +152,7 @@ def discover(root):
     return sorted(paths)
 
 
-def capture(root, stage):
+def capture(root, stage, *, preview_files=None):
     entries, configs, originals, notes = [], {}, {}, []
     total, parser_total, parser_count = 0, 0, 0
     for path in discover(root):
@@ -227,6 +227,10 @@ def capture(root, stage):
                         parser_total += len(raw)
                 else:
                     item["parseReason"] = "该语言暂不支持引用解析"
+                # Reading a captured text file does not require a semantic parser.
+                # Keep these inputs private and outside the parser's file list.
+                if preview_files is not None and "content" not in item:
+                    preview_files.append(dict(id=path, language=language, content=text))
         except (OSError, ValueError, UnicodeError) as exc:
             item.update(
                 captureStatus="skipped",

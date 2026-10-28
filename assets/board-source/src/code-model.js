@@ -1,3 +1,5 @@
+import { apiFetch } from './api-fetch.js';
+
 const functionKinds = /* @__PURE__ */ new Set(["function", "method", "constructor", "lambda"]);
 const kindNames = { file: "文件", class: "类", function: "函数", method: "方法", constructor: "构造函数", lambda: "匿名函数", variable: "变量", parameter: "参数", statement: "语句", call: "调用点", reference: "引用" };
 function containsRange(outer, inner) {
@@ -13,7 +15,7 @@ function frameKey(frame) {
 }
 async function codeQuery(snapshotId, body, signal) {
   for (; ; ) {
-    const response = await fetch("/api/code/query", { method: "POST", headers: { "Content-Type": "application/json", "X-Architecture-Token": document.querySelector('meta[name="architecture-token"]')?.content || "" }, body: JSON.stringify({ snapshotId, ...body }), signal });
+    const response = await apiFetch("/api/code/query", { method: "POST", headers: { "Content-Type": "application/json", "X-Architecture-Token": document.querySelector('meta[name="architecture-token"]')?.content || "" }, body: JSON.stringify({ snapshotId, ...body }), signal });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "代码分析读取失败");
     if (data.status !== "building") return data;

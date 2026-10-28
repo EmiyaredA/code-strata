@@ -56,7 +56,7 @@ code {
   flex-direction: column;
 }
 .topbar {
-  height: 64px;
+  height: 48px;
   flex: none;
   padding: 0 24px;
   background: #fff;
@@ -66,6 +66,11 @@ code {
   justify-content: space-between;
   gap: 24px;
 }
+.topbar .brand-icon { width: 28px; height: 28px; flex: none; }
+.topbar h1 { white-space: nowrap; flex: none; }
+.topbar .button { height: 30px; padding-inline: 10px; }
+.topbar .search-wrap input { height: 30px; }
+.topbar .topbar-chat-toggle { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; }
 .brand,
 .topbar-tools,
 .section-title,

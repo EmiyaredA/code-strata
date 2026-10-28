@@ -1,1 +1,36 @@
-.board-layout{position:relative}.panel-resize-handle{position:absolute;top:0;bottom:0;width:16px;cursor:col-resize;z-index:12;display:flex;align-items:center;justify-content:center;touch-action:none;outline:none}.panel-resize-handle span{width:3px;height:36px;border-radius:3px;background:#d5deeb;transition:height .15s,background .15s}.panel-resize-handle:hover span,.panel-resize-handle:focus-visible span{height:54px;background:#3b82f6}.is-resizing-panels,.is-resizing-panels *{cursor:col-resize!important;user-select:none!important}.panel-resize-handle:focus-visible{background:#dbeafe55}
+.board-layout {
+  position: relative;
+}
+.panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--workspace-gap, 16px);
+  cursor: col-resize;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  outline: none;
+}
+.panel-resize-handle span {
+  width: 3px;
+  height: 36px;
+  border-radius: 3px;
+  background: #d5deeb;
+  transition: height .15s, background .15s;
+}
+.panel-resize-handle:hover span,
+.panel-resize-handle:focus-visible span {
+  height: 54px;
+  background: #3b82f6;
+}
+.is-resizing-panels,
+.is-resizing-panels * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+.panel-resize-handle:focus-visible {
+  background: #dbeafe55;
+}

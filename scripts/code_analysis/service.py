@@ -1,5 +1,6 @@
 """Session-local semantic indexing and bounded, snapshot-scoped graph queries."""
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -38,7 +39,13 @@ def run_language(context, language, mode='index', function=None):
                             capture_output=True, timeout=60, cwd=SCRIPTS, env=env)
     if result.returncode:
         raise ValueError(f'{language} 分析器失败（{result.returncode}）：{result.stderr[-1200:]}')
-    return json.loads(result.stdout)
+    parsed = json.loads(result.stdout)
+    adapter_files = [SCRIPTS / 'analyze-code.cjs'] if language != 'python' else [SCRIPTS / 'code_analysis' / name for name in ('python_engine.py','model.py','worker.py')]
+    fingerprint = hashlib.sha256()
+    for artifact in adapter_files:
+        fingerprint.update(artifact.name.encode() + b'\0' + artifact.read_bytes())
+    parsed.setdefault('engine', {}).update(adapterVersion=1, adapterHash=fingerprint.hexdigest())
+    return parsed
 
 
 class CodeSession:
@@ -74,9 +81,10 @@ class CodeSession:
             self.by_id = {n['id']: n for n in model['nodes']}
             self.file_nodes = {n['path']: n for n in model['nodes'] if n['kind'] == 'file'}
             # Inventory-only files remain navigable without claiming semantic support.
+            reasons = {d.get('path'): d['message'] for d in model['diagnostics'] if d.get('path')}
             for f in self.data.get('inventory', self.data['files']):
                 if f['id'] not in self.file_nodes and f.get('category') != 'config':
-                    obj = dict(id='file:' + f['id'], kind='file', name=f['id'], path=f['id'], language=f.get('language'), status='unsupported', range=dict(start=[1,0], end=[1,0]), reason=f.get('parseReason') or '源码未解析或不支持该语言')
+                    obj = dict(id='file:' + f['id'], kind='file', name=f['id'], path=f['id'], language=f.get('language'), status='unsupported', range=dict(start=[1,0], end=[1,0]), reason=f.get('parseReason') or reasons.get(f['id']) or '源码未解析或不支持该语言')
                     self.file_nodes[f['id']] = obj
                     self.by_id[obj['id']] = obj
             self.incoming, self.outgoing, self.children, self.references = {}, {}, {}, {}
@@ -165,6 +173,14 @@ class CodeSession:
                 group = next((g for g in self.data['groups'] if g['id'] == body['groupId']), None)
                 if not group: raise ValueError('架构分组不存在')
                 wanted.update(group['files'])
+                members = [self.file_nodes[p] for p in group['files'] if p in self.file_nodes]
+                if members:
+                    counts = {}
+                    for r in self.data['imports']:
+                        counts[r['from']] = counts.get(r['from'],0)+1
+                        counts[r['to']] = counts.get(r['to'],0)+1
+                    selected = max(members,key=lambda n: (counts.get(n['path'],0),n['path']))
+                    focus = selected['id']
             elif selected: wanted.add(selected['path'])
             else: wanted.update(self.file_nodes)
             for _ in range(hops):

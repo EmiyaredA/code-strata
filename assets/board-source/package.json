@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "python3 ../../scripts/serve.py --dev",
+    "dev:frontend": "vite --host 127.0.0.1",
     "build": "node scripts/build-skill.mjs"
   },
   "dependencies": {
@@ -16,7 +17,7 @@
     "lucide-react": "^1.28.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
-    "typescript": "^5.9.3",
+    "typescript": "5.9.3",
     "vite": "6.4.2"
   }
 }
