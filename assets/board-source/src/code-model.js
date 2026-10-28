@@ -11,7 +11,7 @@ function innermost(nodes, range) {
   return nodes.filter((n) => containsRange(n.range, range)).sort((a, b) => a.range.end[0] - a.range.start[0] - (b.range.end[0] - b.range.start[0]) || a.range.end[1] - a.range.start[1] - (b.range.end[1] - b.range.start[1]))[0];
 }
 function frameKey(frame) {
-  return `${frame.view}:${frame.groupId || ""}:${frame.focusId || ""}`;
+  return `${frame.view}:${frame.groupId || ""}:${frame.focusId || ""}${frame.moduleTopLevel ? ':module' : ''}`;
 }
 async function codeQuery(snapshotId, body, signal) {
   for (; ; ) {

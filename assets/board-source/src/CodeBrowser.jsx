@@ -1,5 +1,7 @@
 import { CodeSidebar } from "./CodeSidebar.jsx";
 import { CodeSearch } from "./CodeSearch.jsx";
+import { CallHierarchy } from "./CallHierarchy.jsx";
+import { HierarchyStore } from "./call-hierarchy-model.js";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ArrowLeft, ChevronRight, FileCode2, Braces, Variable, LoaderCircle, Info, ArrowUpRight, ChevronDown } from "lucide-react";
@@ -62,6 +64,11 @@ function ObjectList({ objects, onSelect, onEnter, selection, empty = "没有可�
 function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOpen, onToggleSidebar, navigation }) {
   const split = usePanelResize("code-left",400,"left");
   const [graphStats,setGraphStats]=useState(null);
+  const [sourceLocation, setSourceLocation] = useState(null);
+  const [resultKey, setResultKey] = useState("");
+  const hierarchyStore = useMemo(() => new HierarchyStore(data.snapshot.id, codeQuery), [data.snapshot.id, data.project.root]);
+  const sourceSnapshot = useRef(data.snapshot.id);
+  useEffect(() => () => hierarchyStore.cancel(), [hierarchyStore]);
   const [treeExpanded, setTreeExpanded] = useState(/* @__PURE__ */ new Set()), [objectContext, setObjectContext] = useState(null);
   const [frames, setFrames] = useState([]), [position, setPosition] = useState(0), [result, setResult] = useState(null), [loading, setLoading] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [selection, setSelection] = useState(null), [variable, setVariable] = useState(null), [tab, setTab] = useState("source"), [search, setSearch] = useState(""), [matches, setMatches] = useState([]), [moreBusy, setMoreBusy] = useState(false), [occurrences, setOccurrences] = useState(null), [showNotes, setShowNotes] = useState(false);
@@ -69,15 +76,15 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
   const key = current ? frameKey(current) : "", currentRef = useRef(current);
   currentRef.current = current;
   function save() {
-    if (currentRef.current) frameStates.current.set(frameKey(currentRef.current), { selection, variable, tab, treeExpanded, viewport: currentRef.current.viewport });
+    if (currentRef.current) frameStates.current.set(frameKey(currentRef.current), { selection, sourceLocation, variable, tab, treeExpanded, viewport: currentRef.current.viewport });
   }
-  useEffect(() => { save(); }, [active, selection, variable, tab, treeExpanded]);
+  useEffect(() => { save(); }, [active, selection, sourceLocation, variable, tab, treeExpanded]);
   function navigate(next) {
     save();
     const old = frameStates.current.get(frameKey(next));
     next = { ...next, viewport: old?.viewport };
     const prefix = frames.slice(0, position + 1);
-    if (next.view === "functions" && next.level !== "file" && next.path && (current?.groupId || current?.path !== next.path)) {
+    if (next.view === "functions" && !next.hierarchyEntry && next.level !== "file" && next.path && (current?.groupId || current?.path !== next.path)) {
       prefix.push({ view: "files", focusId: next.path, path: next.path, title: next.path.split("/").at(-1) });
     }
     setFrames([...prefix, next]);
@@ -95,6 +102,7 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
     }
     setFrames(entry.fileEntry ? [entry.fileEntry, next] : [next]);
     setPosition(entry.fileEntry ? 1 : 0);
+    setSourceLocation(null);
     setError("");
     setNotice(entry.notice || "");
     setTreeExpanded(new Set(next.path ? parents(next.path) : []));
@@ -102,6 +110,12 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
   }, [entry?.serial, data.project.root]);
   useEffect(() => {
     cache.current.clear();
+    if (sourceSnapshot.current !== data.snapshot.id) {
+      sourceSnapshot.current = data.snapshot.id;
+      frameStates.current.clear();
+      for (const frame of frames) delete frame.hierarchy;
+      setSourceLocation(null);
+    }
     if (frames.length) setNotice("源码快照已更新；正在核对当前对象。");
   }, [data.snapshot.id, data.snapshot.mappingHash]);
   useEffect(() => {
@@ -109,16 +123,18 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
     const control = new AbortController(), run = ++serial.current;
     const cached = cache.current.get(data.snapshot.id + ":" + key), state = frameStates.current.get(key);
     setSelection(state?.selection || cached?.focus || null);
+    setSourceLocation(state?.sourceLocation || null);
     setVariable(state?.variable || null);
     setTab(state?.tab || (current.view === "files" ? "tree" : "source"));
     setOccurrences(null);
     setShowNotes(false);
     setTreeExpanded(state?.treeExpanded || new Set(current.path ? parents(current.path) : []));
     setResult(cached || null);
+    setResultKey(data.snapshot.id + ":" + key);
     setLoading(!cached);
     setError("");
     if (cached) return () => control.abort();
-    codeQuery(data.snapshot.id, { view: current.view, focusId: current.focusId, groupId: current.groupId, hops: current.hops || 1 }, control.signal).then((next) => {
+    codeQuery(data.snapshot.id, { view: current.moduleTopLevel ? 'hierarchy' : current.view, focusId: current.focusId, groupId: current.groupId, hops: current.hops || 1 }, control.signal).then((next) => {
       if (run !== serial.current) return;
       cache.current.set(data.snapshot.id + ":" + key, next);
       setResult(next);
@@ -126,7 +142,8 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
       if (next.status === "failed") setError(next.diagnostics?.map((d) => d.message).join("；") || "代码分析失败");
       else {
         const objects = [...next.nodes || [], ...next.symbols || [], ...next.variables || [], ...next.references || [], ...(next.focus ? [next.focus] : [])];
-        setSelection(objects.find(n=>n.id===state?.selection?.id) || next.focus || null);
+        setSelection(objects.find(n=>n.id===state?.selection?.id) || (current.hierarchy ? state?.selection : null) || next.focus || null);
+        setSourceLocation(state?.sourceLocation || null);
         setVariable((next.variables || []).find(n=>n.id===state?.variable?.id) || (["variable","parameter"].includes(next.focus?.kind) ? next.focus : null));
         if (next.focus && current.view !== "files" && current.level !== "file" && current.title !== next.focus.name) setFrames(list=>list.map((f,i)=>i===position?{...f,title:next.focus.name}:f));
       }
@@ -180,7 +197,7 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
   const details = objectContext && objectContext.focus?.id === selection?.id ? objectContext : result;
   const allObjects = [...result?.nodes || [], ...result?.symbols || [], ...details?.variables || [], ...occurrences?.nodes || []];
   const byId = new Map(allObjects.map((n) => [n.id, n]));
-  const selectedFileId = selection?.path || variable?.path || result?.focus?.path || current?.path;
+  const selectedFileId = sourceLocation?.path || selection?.path || variable?.path || result?.focus?.path || current?.path;
   const source = data.files.find((f) => f.id === selectedFileId);
   const refs = useMemo(() => {
     const scoped = occurrences?.nodes?.filter((n) => n.kind === "reference") || [];
@@ -199,6 +216,7 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
     return ids;
   }, [variable, refs, result, current?.view]);
   function choose(n) {
+    setSourceLocation(null);
     if (n.kind === "relation") {
       const site = result?.references?.find((x) => x.id === n.siteId);
       setSelection(site || { ...n, path: n.path || n.evidence?.from, range: n.range || { start: [n.evidence?.line || 1, 0], end: [n.evidence?.line || 1, 0] } });
@@ -260,11 +278,13 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
   const fileContext = selection?.kind === "file" || (!selection && (current?.view === "files" || current?.level === "file"));
   const selectedTitle = fileContext ? (contextPath || selection?.name || current?.title || "选择文件").split("/").at(-1) : selection?.kind === "relation" ? "关系依据" : selection?.name || result?.focus?.name || "选择对象";
   const functions = (details?.symbols || []).filter((n) => functionKinds.has(n.kind));
+  const isHierarchy = current?.view === "functions" && (functionKinds.has(result?.focus?.kind) || result?.focus?.moduleTopLevel);
+  const logicTarget = current?.hierarchy?.selected.at(-1)?.node || result?.focus;
   if (!current) return null;
   return <div className="code-browser" style={{ display: active ? "flex" : "none" }}>
     <main ref={split.ref} style={{...split.style,...(!sidebarOpen || !split.bounds.enabled ? {gridTemplateColumns:"36px minmax(0,1fr)"} : {})}} className={`board-layout workspace code-workspace has-left-panel ${!split.bounds.enabled ? "is-sidebar-overlay" : ""} ${tab === "source" ? "has-source" : ""}`}>
       <CodeSidebar id="browser-code-sidebar" open={sidebarOpen} onToggle={onToggleSidebar} overlay={!split.bounds.enabled} className="code-context-panel" actions={<div className="code-context-tabs">{[["source", "源码"], ["objects", "结构"], ["tree", "代码树"]].map(([id, label]) => <button key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</div>}>
-        <div className="code-context-heading"><strong title={fileContext ? contextPath : selectedTitle}>{selectedTitle}</strong>{!fileContext && <small title={contextPath}>{contextPath || "选择图中对象查看源码"}</small>}{selection?.reason && <p className="code-object-reason">{selection.reason}</p>}<div>{selection?.range && <span>L{selection.range.start[0]}:{selection.range.start[1] + 1}</span>}{selection?.status && <span>{selection.status === "resolved" ? "静态已解析" : selection.status === "candidate" ? "候选目标" : selection.status === "unsupported" ? "未支持" : "未解析"}</span>}</div></div>
+        <div className="code-context-heading"><strong title={fileContext ? contextPath : selectedTitle}>{selectedTitle}</strong>{!fileContext && <small title={contextPath}>{contextPath || "选择图中对象查看源码"}</small>}{selection?.reason && <p className="code-object-reason">{selection.reason}</p>}<div>{selection?.range && <span>{sourceLocation?.locationKind === "call" ? `定义 L${selection.range.start[0]} · 调用 L${sourceLocation.range.start[0]}` : `L${selection.range.start[0]}:${selection.range.start[1] + 1}`}</span>}{selection?.status && <span>{selection.status === "resolved" ? "静态已解析" : selection.status === "candidate" ? "候选目标" : selection.status === "unsupported" ? "未支持" : "未解析"}</span>}</div></div>
         {(selection?.kind === "file" || functionKinds.has(selection?.kind)) && <div className="map-context-action"><button className="text-button" onClick={() => { save(); onExplain(selection); }}>解读这段代码</button></div>}
         {selection?.sites?.length > 0 && <div className="code-call-sites"><strong>{selection.siteCount} 处调用依据</strong>{selection.sites.map((site) => <button className="text-button" key={site.id} onClick={() => setSelection({ ...selection, id: site.id, path: site.path, range: site.range })}>L{site.range.start[0]}</button>)}</div>}
         {tab === "tree" ? <Tree data={data} expanded={treeExpanded} setExpanded={setTreeExpanded} linked={new Set((result?.nodes || []).filter((n) => n.kind === "file").map((n) => n.path))} focusId={selectedFileId} onFile={(id) => {
@@ -273,7 +293,7 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
       choose(file);
       setTab("tree");
     } else navigate({ view: "files", focusId: id, path: id, title: id.split("/").at(-1) });
-  }} /> : tab === "source" ? <SourcePanel file={source} selection={selection} references={refs} onSelect={choose} onLine={(r) => {
+  }} /> : tab === "source" ? <SourcePanel file={source} selection={sourceLocation || selection} references={refs} onSelect={choose} onLine={(r) => {
     const n = innermost((result?.nodes || []).filter((n2) => n2.path === source?.id), r);
     if (n) choose(n);
   }} /> : <div className="code-structure-scroll"><h3>{current.view === "files" ? "文件内函数" : "函数与嵌套对象"}</h3><ObjectList objects={functions} selection={selection} onSelect={choose} onEnter={enter} />{current.view === "files" && <><h3>当前范围文件</h3><ObjectList objects={result?.nodes || []} selection={selection} onSelect={choose} onEnter={enter} /></>}</div>}
@@ -281,8 +301,8 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
         {tab === "tree" && functions.length > 0 && <section className="code-file-symbols"><div className="detail-heading"><strong>文件内函数</strong><span className="muted">{functions.length}</span></div><ObjectList objects={functions} selection={selection} onSelect={choose} onEnter={enter} /></section>}
       </CodeSidebar>
       <section className="architecture-panel code-main-panel">
-        <div className="panel-header workspace-canvas-toolbar code-browser-toolbar">{navigation}<div className="section-title"><h2>{current.view === "files" ? "文件依赖" : current.view === "logic" ? "函数逻辑" : current.view === "references" ? "变量引用" : "函数调用"}</h2><span className="code-scope-label" title={current.path}>{result?.focus?.name || current.title}</span></div>
-          <div className="panel-actions">{current.view === "functions" && functionKinds.has(result?.focus?.kind) && (result?.symbols||[]).filter(n=>functionKinds.has(n.kind)).length>1&&<div className="graph-function-picker"><SelectMenu label="选择当前函数" value={result?.focus?.id||""} options={result.symbols.filter(n=>functionKinds.has(n.kind)).map(n=>({value:n.id,label:n.name,detail:`L${n.range.start[0]}`}))} onChange={id=>{if(id===result.focus?.id)return;const n=result.symbols.find(n=>n.id===id);if(n)navigate({view:"functions",focusId:n.id,path:n.path,title:n.name});}}/></div>}{result?.focus && functionKinds.has(result.focus.kind) && current.view === "functions" && <button className="text-button enter-logic-button" aria-label="查看函数逻辑" title="查看函数逻辑" onClick={() => navigate({ ...current, view: "logic", focusId:result.focus.id, path:result.focus.path, title: result.focus.name })}><span>查看函数逻辑</span><ChevronRight size={14} /></button>}<button className="icon-button code-return" aria-label={position > 0 ? "返回上层" : "返回模块依赖"} title={position > 0 ? "返回上层" : "返回模块依赖"} onClick={() => {
+        <div className="panel-header workspace-canvas-toolbar code-browser-toolbar">{navigation}<div className="section-title"><h2>{current.view === "files" ? "文件依赖" : current.view === "logic" ? "函数逻辑" : current.view === "references" ? "变量引用" : "调用层级"}</h2><span className="code-scope-label" title={current.path}>{result?.focus?.name || current.title}</span></div>
+          <div className="panel-actions">{current.view === "functions" && functionKinds.has(result?.focus?.kind) && (result?.symbols||[]).filter(n=>functionKinds.has(n.kind)).length>1&&<div className="graph-function-picker"><SelectMenu label="选择起点函数" value={result?.focus?.id||""} options={result.symbols.filter(n=>functionKinds.has(n.kind)).map(n=>({value:n.id,label:n.name,detail:`L${n.range.start[0]}`}))} onChange={id=>{if(id===result.focus?.id)return;const n=result.symbols.find(n=>n.id===id);if(n)navigate({view:"functions",focusId:n.id,path:n.path,title:n.name});}}/></div>}{logicTarget && functionKinds.has(logicTarget.kind) && current.view === "functions" && <button className="text-button enter-logic-button" aria-label="查看函数逻辑" title="查看函数逻辑" onClick={() => navigate({ ...current, view: "logic", focusId:logicTarget.id, path:logicTarget.path, title: logicTarget.name })}><span>查看函数逻辑</span><ChevronRight size={14} /></button>}<button className="icon-button code-return" aria-label={position > 0 ? "返回上层" : "返回模块依赖"} title={position > 0 ? "返回上层" : "返回模块依赖"} onClick={() => {
     save();
     if (position > 0) setPosition(position - 1); else onArchitecture();
   }}><ArrowLeft size={14}/></button>
@@ -295,16 +315,16 @@ function CodeBrowser({ data, entry, active, onArchitecture, onExplain, sidebarOp
           </CodeSearch></div></div>
         <div className="code-canvas-body">
           {notice && <div className="code-canvas-notice" role="status"><Info size={13}/><span>{notice}</span></div>}
-          {loading ? <div className="code-empty" role="status"><LoaderCircle size={24} className="spin" /><strong>{current.view === "logic" ? "正在展开函数结构" : "正在建立源码索引"}</strong><p>首次分析后，同一快照内复用。</p></div> : error ? <div className="code-empty" role="alert"><Info size={24} /><p>{error}</p><button className="text-button" onClick={() => {
+          {loading || resultKey !== data.snapshot.id + ":" + key ? <div className="code-empty" role="status"><LoaderCircle size={24} className="spin" /><strong>{current.view === "logic" ? "正在展开函数结构" : "正在建立源码索引"}</strong><p>首次分析后，同一快照内复用。</p></div> : error ? <div className="code-empty" role="alert"><Info size={24} /><p>{error}</p><button className="text-button" onClick={() => {
     save();
     onArchitecture();
-  }}>返回模块依赖</button></div> : (result?.nodes.length || (current.view === "logic" && result?.focus)) ? <ReactFlowProvider key={key}><CodeGraph onStats={setGraphStats} result={result} selection={selection} related={related} selectedVariable={current.view === "logic" ? variable : null} onSelect={choose} onEnter={enter} frame={current} onViewport={(v) => {
+  }}>返回模块依赖</button></div> : isHierarchy ? <CallHierarchy key={`${data.snapshot.id}:${key}`} root={result.focus} snapshotId={data.snapshot.id} frame={current} store={hierarchyStore} onSelect={choose} onLocate={location => { setSourceLocation(location); setTab("source"); }} onRoot={node => navigate({view:"functions", focusId:node.id, path:node.path, title:node.name, moduleTopLevel:node.moduleTopLevel, hierarchyEntry:true})} onLogic={node => navigate({view:"logic", focusId:node.id, path:node.path, title:node.name})} onStats={setGraphStats}/> : (result?.nodes.length || (current.view === "logic" && result?.focus)) ? <ReactFlowProvider key={key}><CodeGraph onStats={setGraphStats} result={result} selection={selection} related={related} selectedVariable={current.view === "logic" ? variable : null} onSelect={choose} onEnter={enter} frame={current} onViewport={(v) => {
     current.viewport = v;
     const saved = frameStates.current.get(key) || {};
     frameStates.current.set(key, { ...saved, viewport: v });
   }} /></ReactFlowProvider> : <div className="code-empty"><Braces size={26} /><strong>{result?.focus?.status === "unsupported" ? "该文件暂不支持语义分析" : "当前范围没有可展示的函数或关系"}</strong><p>{result?.focus?.reason || "源码仍可在左侧查看。"}</p></div>}
         </div>
-        <footer className="graph-footer" title={result?.note}><span><span className="legend-line" />{current.view === "logic" ? variable ? "变量定义与引用" : "结构顺序与分支" : "静态关系"}<span className={current.view === "logic" || current.view === "references" ? "code-dashed-legend" : "code-dashed-legend is-candidate"} />{current.view === "logic" || current.view === "references" ? "符号引用" : "候选 / 未解析"}</span><span>{result?.diagnosticCount > 0 && <button className="text-button" aria-expanded={showNotes} onClick={() => setShowNotes(!showNotes)}>{result.diagnosticCount} 项分析说明 <ChevronDown size={12}/></button>}{graphStats?.visible ?? result?.nodes.length ?? 0} 个对象{result?.offset > 0 && <button className="text-button" onClick={()=>changeWindow({offset:Math.max(0,result.offset-(result.pageSize||100))})}>上一批</button>}{result?.remaining > 0 && <button className="text-button" disabled={moreBusy} onClick={more}>{moreBusy ? "加载中" : `下一批（余 ${result.remaining}）`}</button>}{result?.edgeOffset > 0 && <button className="text-button" onClick={()=>changeWindow({edgeOffset:Math.max(0,result.edgeOffset-300)})}>上一批关系</button>}{result?.edgeRemaining > 0 && <button className="text-button" onClick={()=>changeWindow({edgeOffset:(result.edgeOffset||0)+300})}>更多关系（余 {result.edgeRemaining}）</button>}{["files", "functions"].includes(current.view) && current.focusId && (current.hops || 1) < 5 && <button className="text-button" onClick={() => {
+        <footer className="graph-footer" title={result?.note}><span><span className="legend-line" />{current.view === "logic" ? variable ? "变量定义与引用" : "结构顺序与分支" : "静态关系"}<span className={current.view === "logic" || current.view === "references" ? "code-dashed-legend" : "code-dashed-legend is-candidate"} />{current.view === "logic" || current.view === "references" ? "符号引用" : "候选 / 未解析"}</span><span>{result?.diagnosticCount > 0 && <button className="text-button" aria-expanded={showNotes} onClick={() => setShowNotes(!showNotes)}>{result.diagnosticCount} 项分析说明 <ChevronDown size={12}/></button>}{graphStats?.visible ?? result?.nodes.length ?? 0} 个对象{!isHierarchy && result?.offset > 0 && <button className="text-button" onClick={()=>changeWindow({offset:Math.max(0,result.offset-(result.pageSize||100))})}>上一批</button>}{!isHierarchy && result?.remaining > 0 && <button className="text-button" disabled={moreBusy} onClick={more}>{moreBusy ? "加载中" : `下一批（余 ${result.remaining}）`}</button>}{!isHierarchy && result?.edgeOffset > 0 && <button className="text-button" onClick={()=>changeWindow({edgeOffset:Math.max(0,result.edgeOffset-300)})}>上一批关系</button>}{!isHierarchy && result?.edgeRemaining > 0 && <button className="text-button" onClick={()=>changeWindow({edgeOffset:(result.edgeOffset||0)+300})}>更多关系（余 {result.edgeRemaining}）</button>}{current.view === "files" && current.focusId && (current.hops || 1) < 5 && <button className="text-button" onClick={() => {
     cache.current.delete(data.snapshot.id + ":" + key);
     current.hops = (current.hops || 1) + 1;
     setFrames([...frames]);

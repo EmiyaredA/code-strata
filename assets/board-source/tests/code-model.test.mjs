@@ -10,6 +10,7 @@ test('navigation keys distinguish levels, groups, and scope; zoom is not semanti
   assert.notEqual(frameKey({view:'functions',focusId:'f'}),frameKey({view:'logic',focusId:'f'}));
   assert.notEqual(frameKey({view:'files',groupId:'a'}),frameKey({view:'files',groupId:'b'}));
   assert.equal(frameKey({view:'logic',focusId:'f',viewport:{zoom:1}}),frameKey({view:'logic',focusId:'f',viewport:{zoom:.5}}));
+ assert.notEqual(frameKey({view:'functions',focusId:'file',moduleTopLevel:true}),frameKey({view:'functions',focusId:'file'}));
 });
 import {focusLayout,rankedLayout} from '../src/relation-layout.js';
 test('focused calls have explicit upstream, current and downstream columns; containment is not a call',()=>{
@@ -47,4 +48,17 @@ test("fit viewport keeps known cards below the guide and inside the canvas", asy
     assert.ok(card.x*view.zoom+view.x>=0 && (card.x+card.width)*view.zoom+view.x<=900);
     assert.ok(card.y*view.zoom+view.y>=42 && (card.y+card.height)*view.zoom+view.y<=540);
   }
+});
+
+test('opening the chat or hierarchy drawer keeps the same graph center and user zoom', async () => {
+  const {resizeViewport} = await import('../src/relation-layout.js');
+  const before = {width:1100,height:800}, after = {width:580,height:800}, viewport = {x:430,y:78,zoom:.9};
+  const next = resizeViewport(viewport,before,after);
+  assert.equal(next.zoom,viewport.zoom);
+  assert.equal((before.width/2-viewport.x)/viewport.zoom,(after.width/2-next.x)/next.zoom);
+  assert.equal(next.y,viewport.y);
+  assert.deepEqual(resizeViewport(next,after,before),viewport);
+  const cards = [{x:0,y:72,width:240,height:104},{x:0,y:224,width:240,height:104},{x:0,y:376,width:240,height:104}];
+  const shorter = resizeViewport({x:200,y:-8,zoom:1},{width:700,height:800},{width:500,height:570},cards);
+  for (const card of cards) { assert.ok(card.y+shorter.y>=52); assert.ok(card.y+card.height+shorter.y<=546); }
 });

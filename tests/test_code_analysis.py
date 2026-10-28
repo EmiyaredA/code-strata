@@ -115,6 +115,18 @@ class CodeAnalysisTests(unittest.TestCase):
         graph=self.session.query(dict(view='functions',focusId=focus['id']))
         self.assertTrue(any(r.get('siteCount',0)>1 for r in graph['relations']))
 
+    def test_typescript_call_hierarchy_keeps_constructor_sites_and_unknown_callbacks(self):
+        focus = self.node('uploadAsset', 'javascript', 'function')
+        result = self.session.query(dict(view='hierarchy', focusId=focus['id']))
+        self.assertTrue(any(n['kind'] == 'constructor' for n in result['nodes']))
+        self.assertTrue(any(n['kind'] == 'call' and n['name'] == 'handler' and n['status'] == 'unresolved' for n in result['nodes']))
+        permit = self.node('permit', 'javascript', 'function')
+        relation = next(r for r in result['relations'] if r['target'] == permit['id'])
+        self.assertGreater(relation['siteCount'], 1)
+        incoming = self.session.query(dict(view='hierarchy', focusId=permit['id'], direction='incoming'))
+        self.assertTrue(any(r['source'] == focus['id'] and r['target'] == permit['id'] for r in incoming['relations']))
+        self.assertTrue(all(r['source'] == focus['id'] for r in result['relations']))
+
     def test_global_reads_are_not_closure_captures(self):
         shared=self.node('shared','python','variable')
         self.assertTrue(all(not self.session.by_id[x]['capture'] for x in self.session.references[shared['id']]))

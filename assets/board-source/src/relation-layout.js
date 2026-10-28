@@ -120,3 +120,16 @@ export function layoutViewport(projection, width, height) {
   const zoom = Math.max(.2,Math.min(1,(width-64)/Math.max(1,spanX),(height-100)/Math.max(1,spanY)));
   return {x:(width-spanX*zoom)/2-left*zoom,y:52+(height-76-spanY*zoom)/2-top*zoom,zoom};
 }
+
+// Preserve the visible center (and user zoom) when a neighboring panel changes size.
+export function resizeViewport(viewport, before, after, cards = []) {
+  const next = { ...viewport, x: viewport.x + (after.width - before.width) / 2, y: viewport.y + (after.height - before.height) / 2 };
+  if (cards.length) {
+    for (const [axis, size, dimension, leading, trailing] of [['x','width','width',24,24],['y','height','height',52,24]]) {
+      const low = leading - Math.min(...cards.map(n=>n[axis])) * viewport.zoom;
+      const high = after[size] - trailing - Math.max(...cards.map(n=>n[axis]+n[dimension])) * viewport.zoom;
+      if (low <= high) next[axis] = Math.max(low, Math.min(high, next[axis]));
+    }
+  }
+  return next;
+}

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ReactFlow, Background, Handle, Position, MarkerType, useReactFlow, BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from "@xyflow/react";
 import { FileCode2, Braces, Variable, GitBranch, Maximize, ArrowRight, LogIn, LogOut, TriangleAlert, RotateCcw, ChevronDown } from "lucide-react";
 import { kindNames, containsRange, innermost } from "./code-model.js";
-import { focusLayout, rankedLayout, layoutViewport } from "./relation-layout.js";
+import { focusLayout, rankedLayout, layoutViewport, resizeViewport } from "./relation-layout.js";
 let elkPromise;
 const getElk = () => elkPromise ||= import("elkjs/lib/elk.bundled.js").then((m) => new m.default());
 function ReaderNode({ data }) {
@@ -10,7 +10,7 @@ function ReaderNode({ data }) {
   const Icon = n.kind === "file" ? FileCode2 : n.kind === "entry" ? LogIn : terminal ? LogOut : control ? GitBranch : n.kind === "summary" ? TriangleAlert : n.kind === "variable" || n.kind === "parameter" ? Variable : Braces;
   if (n.kind === "lane") return <div className="reader-lane"><strong>{n.name}</strong><span>{n.subtitle}</span></div>;
   if (n.kind === "empty") return <div className="reader-empty">{n.name}</div>;
-  const title = n.moduleTopLevel ? "模块顶层代码" : n.kind === "file" ? n.path.split("/").at(-1) : n.kind === "statement" ? n.name : n.name;
+  const title = n.moduleTopLevel ? "模块顶层代码" : n.kind === "file" ? n.path.split("/").at(-1) : n.kind === 'call' ? n.name : n.qualifiedName || n.name;
   return <>
   <Handle id="in" type="target" position={data.vertical ? Position.Top : Position.Left} isConnectable={false} />
   <div data-node-type={n.nodeType} className={`reader-node ${data.active ? "is-active" : ""} ${data.role === "focus" ? "is-focus" : ""} ${data.related ? "is-related" : ""} ${n.kind === "summary" ? "is-summary" : ""} ${terminal ? "is-terminal" : ""} ${control ? "is-control" : ""} ${n.kind === "entry" ? "is-entry" : ""}`}>
@@ -23,7 +23,7 @@ ${n.path || ""}${n.range ? ":" + n.range.start[0] : ""}`}>
     <small>{n.kind === "summary" ? "展开查看调用位置" : n.kind === "entry" ? "函数体开始" : n.kind === "statement" ? terminal ? "返回 / 中断位置" : control ? "结构分支" : n.branch && n.branch !== "body" ? n.branch : "语句" : `${n.moduleTopLevel ? "调用点" : kindNames[n.kind] || n.kind}${n.asyncFunction ? " · async" : ""}`}</small>
     {data.role === "focus" && n.parameters && <span className="reader-parameters">参数：{n.parameters.join(", ") || "无"}</span>}{n.range && <span className="reader-location">{n.kind === "file" ? n.path : n.path?.split("/").at(-1)}:{n.range.start[0]}</span>}
    </button>
-   {["file", "class", "function", "method", "constructor", "lambda"].includes(n.kind) && <button className="reader-enter nodrag nopan" aria-label={n.kind === "file" ? `查看 ${n.path} 的函数` : `${data.role === "focus" ? "查看逻辑" : "聚焦函数"} ${n.name}`} onClick={() => n.moduleTopLevel || n.kind === "class" && data.role === "focus" ? data.onSelect(n) : data.onEnter(n)}>{n.moduleTopLevel ? "看调用点" : n.kind === "file" ? "看函数" : n.kind === "class" && data.role === "focus" ? "看声明" : data.role === "focus" ? "看逻辑" : "聚焦"}<ArrowRight size={12} /></button>}
+   {["file", "class", "function", "method", "constructor", "lambda"].includes(n.kind) && <button className="reader-enter nodrag nopan" aria-label={n.kind === "file" ? `查看 ${n.path} 的函数` : `${data.hierarchy || data.role === "focus" ? "查看逻辑" : "聚焦函数"} ${n.name}`} onClick={() => n.moduleTopLevel || n.kind === "class" && data.role === "focus" ? data.onSelect(n) : data.onEnter(n)}>{n.moduleTopLevel ? "看调用点" : n.kind === "file" ? "看函数" : n.kind === "class" && data.role === "focus" ? "看声明" : data.hierarchy || data.role === "focus" ? "看逻辑" : "聚焦"}<ArrowRight size={12} /></button>}
    {data.mutual && <span className="reader-cycle"><RotateCcw size={11} />互相调用</span>}
   </div>
   <Handle id="out" type="source" position={data.vertical ? Position.Bottom : Position.Right} isConnectable={false} />
@@ -85,8 +85,31 @@ function logicProjection(result, selectedVariable, related) {
 function CodeGraph({ result, selection, related, onSelect, onEnter, frame, onViewport, selectedVariable, onStats }) {
   const flow = useReactFlow(), host = useRef(null), restored = useRef(false), [showUnknown, setShowUnknown] = useState(frame.showUnknown || false);
   const callbacks = useRef({ onSelect, onEnter, onViewport });
+  const latestProjection = useRef(null);
   callbacks.current = { onSelect, onEnter, onViewport };
+  useEffect(() => {
+    if (frame.view !== 'hierarchy') return;
+    let previous;
+    const observer = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      if (!width || !height) return;
+      if (previous && restored.current) {
+        const viewport = flow.getViewport();
+        flow.setViewport(resizeViewport(viewport, previous, { width, height }, latestProjection.current?.nodes));
+      }
+      previous = { width, height };
+    });
+    observer.observe(host.current);
+    return () => observer.disconnect();
+  }, [flow, frame.view]);
   const baseProjection = useMemo(() => {
+    if (result.hierarchy) {
+      const unknown = result.nodes.filter(n => n.kind === 'call' && n.id !== result.focus?.id);
+      const hidden = new Set(showUnknown ? [] : unknown.map(n => n.id));
+      const objects = result.nodes.filter(n => !hidden.has(n.id)), relations = result.relations.filter(r => !hidden.has(r.target));
+      const output = rankedLayout(objects, relations, { showIsolated: true, width: 104, height: 240, gapX: 48, gapY: 32 });
+      return { ...output, unknownCount: unknown.length, vertical: true, headers: [], nodes: output.nodes.map(n => ({ ...n, x: n.y - 66, y: n.x + 72, width: 240, height: 104, role: n.id === result.focus?.id ? 'focus' : 'context' })), edges: output.edges.map(r => ({ ...r, label: `${result.nodes.find(n => n.id === r.target)?.kind === 'constructor' ? '构造' : '调用'}${r.range ? ` · L${r.range.start[0]}` : ''}${r.status === 'candidate' ? ' · 候选' : r.status === 'unresolved' ? ' · 未解析' : ''}` })) };
+    }
     if (frame.view === "logic") return logicProjection(result, selectedVariable, related);
     if (frame.view === "references") {
       const focus = result.focus, uses = result.nodes.filter((n) => n.id !== focus.id);
@@ -122,16 +145,17 @@ function CodeGraph({ result, selection, related, onSelect, onEnter, frame, onVie
     };
   }, [baseProjection, frame.view, selectedVariable]);
   const projection = logicLayout?.input === baseProjection ? { ...baseProjection, nodes: logicLayout.nodes } : baseProjection;
+  latestProjection.current = projection;
   useEffect(() => {
     onStats?.({ visible: new Set(projection.nodes.filter((n) => !n.id.startsWith("ui:") && !["empty", "summary", "entry"].includes(n.object.kind)).map((n) => n.object.id)).size, unknown: projection.unknownCount || 0 });
   }, [baseProjection, onStats]);
   const byLayout = new Map(projection.nodes.map((n) => [n.id, n]));
-  const nodes = [...projection.nodes.map((n) => ({ id: n.id, type: "reader", position: { x: n.x, y: n.y }, width: n.width, height: n.height, handles: readerHandles(n.width, n.height, projection.vertical), style: { width: n.width, height: n.height }, draggable: false, data: { ...n, object: n.object, vertical: projection.vertical, active: selection?.id === n.object.id, related: related?.has(n.object.id), onSelect: (n2) => callbacks.current.onSelect(n2), onEnter: (n2) => callbacks.current.onEnter(n2), onToggleUnknown: () => {
+  const nodes = [...projection.nodes.map((n) => ({ id: n.id, type: "reader", position: { x: n.x, y: n.y }, width: n.width, height: n.height, handles: readerHandles(n.width, n.height, projection.vertical), style: { width: n.width, height: n.height }, draggable: false, data: { ...n, hierarchy: result.hierarchy, object: n.object, vertical: projection.vertical, active: selection?.id === n.object.id, related: related?.has(n.object.id), onSelect: (n2) => callbacks.current.onSelect(n2), onEnter: (n2) => callbacks.current.onEnter(n2), onToggleUnknown: () => {
     frame.showUnknown = !showUnknown;
     setShowUnknown(!showUnknown);
   } } })), ...(projection.headers || []).map((h) => ({ id: h.id, type: "reader", position: { x: h.x, y: h.y }, width: h.width, height: 40, style: { width: h.width, height: 40 }, selectable: false, focusable: false, data: { object: { kind: "lane", name: h.name } } }))];
   const edges = projection.edges.filter((r) => byLayout.has(r.source) && byLayout.has(r.target)).slice(0, 300).map((r) => {
-    const self = r.source === r.target, uncertain = r.status === "candidate" || r.status === "unresolved", blue = ["references", "defines"].includes(r.kind), color = blue ? "#2563eb" : uncertain ? "#b88836" : "#7891ad";
+    const self = r.source === r.target, uncertain = r.status === "candidate" || r.status === "unresolved", blue = ["references", "defines"].includes(r.kind) || r.trail, color = uncertain ? "#b88836" : blue ? "#2563eb" : "#7891ad";
     return { id: r.id, source: r.source, target: r.target, type: "reader", sourceHandle: self ? "loop-out" : "out", targetHandle: self ? "loop-in" : "in", label: self ? "递归" : r.label || (r.kind === "calls" ? r.status === "candidate" ? "候选" : r.siteCount > 1 ? `${r.siteCount} 处调用` : "" : r.kind === "imports" ? "导入" : ""), markerEnd: { type: MarkerType.ArrowClosed, width: 17, height: 17, color }, style: { stroke: color, strokeWidth: self || blue ? 1.8 : 1.4, strokeDasharray: uncertain || r.kind === "references" ? "5 4" : void 0 }, data: { relation: r, onSelect: (n) => callbacks.current.onSelect(n) } };
   });
   const variableBefore = useRef(null), lastVariable = useRef(selectedVariable?.id);
@@ -140,6 +164,7 @@ function CodeGraph({ result, selection, related, onSelect, onEnter, frame, onVie
       const width = host.current?.clientWidth || 850;
       if (!restored.current) {
         if (frame.viewport) flow.setViewport(frame.viewport);
+        else if (frame.view === "hierarchy") flow.setViewport(hierarchyViewport(projection, width, host.current.clientHeight));
         else if (frame.view === "references") flow.setViewport({ x: 32, y: 64, zoom: 0.9 });
         else if (frame.view === "logic") {
           if (!selectedVariable && logicLayout?.input !== baseProjection) return;
@@ -151,6 +176,8 @@ function CodeGraph({ result, selection, related, onSelect, onEnter, frame, onVie
           flow.setViewport({ x: width / 2 - ((focus?.x || 0) + (focus?.width || 216) / 2) * zoom, y: 56, zoom });
         }
         restored.current = true;
+      } else if (frame.view === 'hierarchy' && !frame.viewport) {
+        flow.setViewport(hierarchyViewport(projection, width, host.current.clientHeight));
       }
       if (selectedVariable?.id !== lastVariable.current) {
         if (selectedVariable) {
@@ -163,14 +190,21 @@ function CodeGraph({ result, selection, related, onSelect, onEnter, frame, onVie
     return () => clearTimeout(timer);
   }, [baseProjection, logicLayout, flow, frame.view, selectedVariable?.id]);
   return <div className="code-graph-wrap readable-graph" ref={host}>
-  <div className="graph-reading-guide">{frame.view === "logic" ? selectedVariable ? "变量定义 → 符号引用" : "函数体开始 → 结构分支 → 返回 / 中断" : frame.view === "files" ? "引用方 → 当前文件 → 被引用方" : frame.view === "references" ? "变量定义 → 引用位置" : "调用方 → 当前函数 → 被调用方"}<small>{frame.view === "logic" ? "结构简图；异常与异步路径不作完整展开" : "箭头表示静态关系"}</small></div>
+  <div className="graph-reading-guide">{frame.view === "hierarchy" ? "当前分支与直接调用关系" : frame.view === "logic" ? selectedVariable ? "变量定义 → 符号引用" : "函数体开始 → 结构分支 → 返回 / 中断" : frame.view === "files" ? "引用方 → 当前文件 → 被引用方" : frame.view === "references" ? "变量定义 → 引用位置" : "调用方 → 当前函数 → 被调用方"}<small>{frame.view === "logic" ? "结构简图；异常与异步路径不作完整展开" : "箭头表示静态关系"}</small></div>
   <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} nodesDraggable={false} nodesConnectable={false} zoomOnDoubleClick={false} minZoom={0.2} maxZoom={1.6} onMoveEnd={(_, v) => callbacks.current.onViewport(v)} onEdgeClick={(_, e) => callbacks.current.onSelect({ ...e.data.relation, kind: "relation" })} proOptions={{ hideAttribution: true }}><Background color="#dce4ee" gap={22} size={0.7} /></ReactFlow>
   <button className="icon-button code-fit" aria-label="适应代码画布" title="适应画布" onClick={() => flow.setViewport(layoutViewport(projection, host.current.clientWidth, host.current.clientHeight), { duration: 160 })}><Maximize size={16} /></button>
+  {frame.view === 'hierarchy' && !showUnknown && projection.unknownCount > 0 && <button className="text-button graph-hide-unknown" onClick={() => setShowUnknown(true)}>展开 {projection.unknownCount} 处未解析调用</button>}
   {showUnknown && projection.unknownCount > 0 && <button className="text-button graph-hide-unknown" onClick={() => {
     frame.showUnknown = false;
     setShowUnknown(false);
   }}>收起未解析调用</button>}
  </div>;
+}
+function hierarchyViewport(projection, width, height) {
+  const fit = layoutViewport(projection, width, height);
+  if (fit.zoom >= .8) return { ...fit, y: 64 - Math.min(...projection.nodes.map(n => n.y)) * fit.zoom };
+  const focus = projection.nodes.find(n => n.role === 'focus') || projection.nodes[0];
+  return { x: width / 2 - ((focus?.x || 0) + 120) * .8, y: Math.max(52, height - 144) - (focus?.y || 0) * .8, zoom: .8 };
 }
 export {
   CodeGraph

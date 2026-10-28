@@ -131,8 +131,11 @@ class CodeSession:
             if field in body and (not isinstance(body[field], str) or len(body[field]) > 2000):
                 raise ValueError(f'{field} 参数无效')
         view = body.get('view', 'files')
-        if view not in ('files','functions','logic','references','search','symbols'):
+        if view not in ('files','functions','logic','references','search','symbols','hierarchy'):
             raise ValueError('未知的代码视图')
+        direction = body.get('direction', 'outgoing')
+        if view == 'hierarchy' and direction not in ('incoming', 'outgoing'):
+            raise ValueError('调用方向无效')
         limit = body.get('limit', MAX_NODES)
         offset = body.get('offset', 0)
         edge_offset = body.get('edgeOffset', 0)
@@ -146,6 +149,8 @@ class CodeSession:
         focus = body.get('focusId')
         if focus in self.file_nodes: focus = self.file_nodes[focus]['id']
         selected = self.by_id.get(focus)
+        if view == 'hierarchy':
+            return self.hierarchy(base, selected, direction, offset, limit, edge_offset)
         # A file is a scope, not a function-call entry node. Pick a visible default
         # function and disclose the choice; callers can explicitly select another.
         scope_file = selected['path'] if selected and selected['kind'] == 'file' else None
@@ -271,3 +276,57 @@ class CodeSession:
                     symbols=symbols, variables=variables[:100], references=refs[:300], detailTruncated=len(variables)>100 or len(refs)>300,
                     diagnostics=diagnostics[:100], diagnosticCount=len(diagnostics), engines=self.metrics,
                     note='结构化逻辑简图；不表示完整控制流。变量连线表示符号引用。' if view == 'logic' else '静态调用目标不代表实际运行调用。')
+
+    def hierarchy(self, base, selected, direction, offset, limit, edge_offset):
+        """One directional adjacency page. Never derive a tree from browsing history."""
+        if limit < 2:
+            raise ValueError('调用层级每页至少容纳起点和一个相邻对象')
+        if not selected or selected['kind'] not in FUNCTIONS | {'file'}:
+            raise ValueError('请选择函数或模块顶层代码')
+        focus = selected['id']
+        grouped = {}
+        for relation in (self.outgoing if direction == 'outgoing' else self.incoming).get(focus, []):
+            if relation['kind'] != 'calls':
+                continue
+            key = (relation['source'], relation['target'], relation.get('status'))
+            if key not in grouped:
+                grouped[key] = dict(relation, sites=[], siteCount=0)
+            item = grouped[key]
+            item['siteCount'] += 1
+            if len(item['sites']) < 100:
+                item['sites'].append(dict(id=relation.get('siteId'), path=relation.get('path'), range=relation.get('range')))
+        relations = list(grouped.values())
+        if direction == 'outgoing':
+            calls = self.calls_by_function.get(focus, []) if selected['kind'] != 'file' else [n for n in self.calls_by_function.get(None, []) if n.get('ownerId') == focus]
+            for call in calls:
+                if not call.get('targetId'):
+                    relations.append(edge('unresolved-call', focus, call['id'], siteId=call['id'], status='unresolved', path=call['path'], range=call['range'], siteCount=1, sites=[dict(id=call['id'], path=call['path'], range=call['range'])]))
+        def describe(node):
+            result = dict(node)
+            names, owner = [node['name']], self.by_id.get(node.get('ownerId'))
+            while node['kind'] != 'call' and owner and owner['kind'] in FUNCTIONS | {'class'}:
+                names.insert(0, owner['name'])
+                owner = self.by_id.get(owner.get('ownerId'))
+            result['qualifiedName'] = '.'.join(names)
+            if node['kind'] == 'file':
+                result['moduleTopLevel'] = True
+            return result
+        endpoint = 'target' if direction == 'outgoing' else 'source'
+        neighbors = {r[endpoint] for r in relations}
+        ordered = sorted(neighbors, key=lambda key: (self.by_id[key]['path'], self.by_id[key]['range']['start'], key))
+        # The root is always present, including recursive self-calls and later pages.
+        page_size = max(1, limit - 1)
+        page_ids = set(ordered[offset:offset + page_size])
+        visible = [r for r in relations if r[endpoint] in page_ids]
+        remaining = max(0, len(ordered) - offset - page_size)
+        nodes = [describe(selected)] + [describe(self.by_id[key]) for key in ordered[offset:offset + page_size] if key != focus]
+        return dict(**base, direction=direction, focus=describe(selected), nodes=nodes,
+                    relations=visible[edge_offset:edge_offset + MAX_EDGES], totalNodes=len(neighbors | {focus}),
+                    offset=offset, pageSize=page_size, remaining=remaining,
+                    nextOffset=offset + page_size if remaining else None,
+                    totalEdges=len(relations), edgeOffset=edge_offset,
+                    edgeRemaining=max(0, len(visible) - edge_offset - MAX_EDGES),
+                    truncated=bool(remaining or offset or len(visible) > MAX_EDGES),
+                    siteTruncated=any(r['siteCount'] > len(r['sites']) for r in visible),
+                    symbols=[], variables=[], references=[], diagnostics=[], diagnosticCount=len(self.model['diagnostics']),
+                    note='静态调用层级；模块顶层、构造调用和未解析调用保留源码依据，不表示实际执行顺序。')

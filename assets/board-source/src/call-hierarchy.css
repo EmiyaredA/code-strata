@@ -1,0 +1,49 @@
+.call-hierarchy { position: absolute; inset: 0; display: grid; grid-template-columns: var(--hierarchy-width) minmax(0,1fr); min-height: 0; }
+.hierarchy-tree-panel { position: relative; min-height: 0; min-width: 0; display: flex; flex-direction: column; background: #fff; border-right: 1px solid #e2e8f0; z-index: 7; }
+.hierarchy-tree-panel > header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 8px; min-height: 36px; }
+.hierarchy-tree-panel > header strong { font-size: 13px; color: #1e293b; }
+.hierarchy-tree-panel > header > span { font-size: 10px; color: #3563ff; background: #edf3ff; border: 1px solid #dce6ff; border-radius: 4px; padding: 1px 5px; }
+.hierarchy-tree-panel > header > button { margin-left: auto; }
+.hierarchy-direction { display: flex; padding: 3px; margin: 0 10px 10px; border: 1px solid #dce4ee; border-radius: 6px; gap: 3px; }
+.hierarchy-direction button { flex: 1; border: 0; border-radius: 4px; background: transparent; padding: 6px 2px; color: #64748b; cursor: pointer; font-size: 11px; white-space: nowrap; }
+.hierarchy-direction button[aria-pressed="true"] { background: #3563ff; color: white; }
+.hierarchy-tree { margin: 0; padding: 0 7px 12px; overflow: auto; flex: 1; min-height: 0; }
+.hierarchy-tree li, .hierarchy-tree ul { list-style: none; margin: 0; padding: 0; }
+.hierarchy-tree li { position: relative; }
+.hierarchy-row { display: flex; align-items: flex-start; position: relative; min-width: 0; padding: 7px 3px 7px calc(2px + min(var(--tree-depth), 6) * 13px); border-radius: 5px; margin-bottom: 2px; color: #334155; }
+.hierarchy-row:hover { background: #f7f9fc; }
+.hierarchy-row.is-selected { background: #edf4ff; color: #2563eb; box-shadow: inset 2px 0 #3563ff; }
+.hierarchy-expand, .hierarchy-menu-trigger { width: 19px; height: 22px; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: #7891ad; flex-shrink: 0; cursor: pointer; border-radius: 3px; }
+.hierarchy-expand:disabled { visibility: hidden; }
+.hierarchy-node { min-width: 0; flex: 1; padding: 1px 2px; display: flex; flex-direction: column; gap: 4px; color: inherit; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.hierarchy-node > span { display: flex; align-items: flex-start; gap: 5px; }
+.hierarchy-node > span > svg { flex-shrink: 0; margin-top: 2px; }
+.hierarchy-node strong { font: 500 12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap: anywhere; min-width: 0; }
+.hierarchy-node small { color: #7891ad; font: 11px/1.5 system-ui; overflow-wrap: anywhere; }
+.hierarchy-node em { margin-left: 4px; padding: 1px 3px; border-radius: 3px; color: #6484bb; background: #f1f6ff; font: normal 10px/1.4 system-ui; white-space: nowrap; }
+.hierarchy-node .hierarchy-status { color: #9b7a43; display: flex; align-items: center; gap: 3px; }
+.hierarchy-node-menu { position: fixed; z-index: 80; width: 150px; padding: 4px; background: white; border: 1px solid #dce4ee; box-shadow: 0 5px 18px #0f172a18; border-radius: 6px; }
+.hierarchy-node-menu button { display: block; width: 100%; padding: 8px 10px; text-align: left; color: #334155; background: white; border: 0; cursor: pointer; border-radius: 4px; font-size: 12px; }
+.hierarchy-node-menu button:hover, .hierarchy-node-menu button:focus-visible { background: #edf4ff; color: #2563eb; }
+.hierarchy-node-menu button:disabled { color: #94a3b8; cursor: default; }
+.hierarchy-feedback { padding: 5px 12px 7px 30px !important; color: #94a3b8; font-size: 11px; line-height: 1.5; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.hierarchy-feedback button, .hierarchy-sites button { border: 0; background: transparent; color: #3563ff; cursor: pointer; font-size: 11px; padding: 1px 3px; }
+.hierarchy-feedback [role="alert"] { color: #a86b35; }
+.hierarchy-unknown-toggle { display: flex; align-items: center; gap: 5px; padding: 8px 12px 8px 24px; border: 0; background: transparent; cursor: pointer; color: #9b7a43; font: 11px/1.5 system-ui; }
+.hierarchy-sites { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px 10px 7px 28px; font-size: 10px; color: #94a3b8; max-height: 115px; overflow: auto; }
+.hierarchy-sites small { font-size: 10px; }
+.hierarchy-resizer { position: absolute; top: 0; bottom: 0; right: -4px; width: 7px; cursor: col-resize; z-index: 8; outline-offset: -2px; }
+.hierarchy-resizer:hover, .hierarchy-resizer:focus-visible { background: #dbeafe99; }
+.hierarchy-graph { position: relative; min-width: 0; min-height: 0; }
+.hierarchy-graph .graph-reading-guide { font-size: 11px; padding: 0 12px; gap: 8px; flex-wrap: wrap; align-content: center; }
+.hierarchy-graph .graph-reading-guide small { font-size: 9px; }
+.hierarchy-graph .reader-node strong { white-space: normal; overflow-wrap: anywhere; font-size: 13px; line-height: 1.4; max-height: 38px; }
+.hierarchy-graph .reader-node-main { gap: 3px; padding: 10px 12px; }
+.hierarchy-graph .reader-parameters { display: none; }
+.hierarchy-budget { position: absolute; bottom: 12px; right: 10px; max-width: calc(100% - 64px); font-size: 10px; color: #9b7a43; background: #fffbebed; border-radius: 4px; padding: 4px 7px; }
+.call-hierarchy.is-narrow { display: block; }
+.is-narrow .hierarchy-graph { width: 100%; height: 100%; }
+.is-narrow .hierarchy-tree-panel { position: absolute; left: 0; top: 0; bottom: 0; width: min(var(--hierarchy-width), 85%); z-index: 16; box-shadow: 5px 0 14px #0f172a0d; }
+.hierarchy-backdrop { position: absolute; inset: 0; z-index: 15; background: #0f172a12; border: 0; cursor: pointer; }
+.hierarchy-opener { position: absolute; left: 8px; top: 48px; z-index: 8; background: white; }
+.hierarchy-row button:focus-visible, .hierarchy-direction button:focus-visible { outline: 2px solid #93b4ff; outline-offset: 1px; }
