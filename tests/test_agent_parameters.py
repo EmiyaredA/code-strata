@@ -11,7 +11,7 @@ from agents.adapters import BY_ID
 from agents.config import defaults, validate_settings
 from agents.models import codex_models, opencode_models
 from agents.parameters import available_parameters, check_parameters, claude_parameters
-from agents.runtime import AgentError
+from agents.runtime import AgentError, Process
 
 
 class ParameterTests(AgentFixture):
@@ -125,8 +125,12 @@ class ParameterTests(AgentFixture):
         self.assertFalse(any('prompt' in row for row in rows))
 
     def test_optional_help_failure_preserves_pi_model_catalog(self):
-        self.service.model_catalog.timeout = .2
-        with patch.dict(os.environ, {'CODE_STRATA_FAKE_MODE': 'help_hang'}):
+        # Exercise optional-help timeout, not a sub-200ms Python startup race.
+        # The real hung helper still has a strict deadline and is terminated.
+        self.service.model_catalog.timeout = 2
+        def optional_deadline(launch, args, cwd, cancel, timeout, **kwargs):
+            return Process(launch, args, cwd, cancel, min(timeout,.05) if args == ['--help'] else timeout, **kwargs)
+        with patch.dict(os.environ, {'CODE_STRATA_FAKE_MODE': 'help_hang'}), patch('agents.model_catalog.Process',side_effect=optional_deadline):
             result = self.service.model_catalog.get({'agentId': 'pi', 'config': self.config})
         self.assertEqual(result['status'], 'ready', result)
         self.assertTrue(result['models'])

@@ -1,3 +1,4 @@
+import { sourceGroups } from './source-tags.js';
 export const UML_TYPES = { activity: '活动图', sequence: '时序图', class: '类图', component: '组件图', state: '状态图', usecase: '用例图', deployment: '部署图', legacy: '旧版阅读图' };
 export const tabKey = project => 'code-strata:uml:' + project;
 export const versionKey = diagram => `${diagram.id}:${diagram.revision}`;
@@ -14,7 +15,7 @@ export function elementEvidence(model, element) {
   if (!element) return [];
   const own = element.evidence || [];
   const endpoints = element.source ? model.nodes.filter(n => [element.source, element.target].includes(n.id)).flatMap(n => n.evidence || []) : [];
-  return [...new Map([...own, ...endpoints].map(r => [`${r.path}:${r.startLine}:${r.locationKind}`, r])).values()];
+  return [...new Map([...own.map(r=>({...r,origin:'element'})), ...endpoints.map(r=>({...r,origin:'endpoint'}))].reverse().map(r => [`${r.path}:${r.startLine}:${r.locationKind}:${r.association||''}`, r])).values()].reverse();
 }
 export function selectionFiles(model, element) {
   return [...new Set(elementEvidence(model, element).map(r => r.path))];
@@ -29,22 +30,27 @@ export function requestGate() {
   return { next: () => ++serial, current: token => token === serial, invalidate: () => ++serial };
 }
 
-export function nodeSize(node, type) {
+export function nodeSize(node, type, tagMode = 'folded') {
   if (['start', 'end'].includes(node.role)) return { width: 30, height: 30 };
+  if (node.role === 'merge') return { width: 36, height: 36 };
   if (['fork', 'join'].includes(node.role)) return { width: 110, height: 10 };
-  if (['decision', 'choice', 'merge'].includes(node.role)) return { width: 116, height: 88 };
-  if (node.role === 'actor') return { width: 140, height: 104 };
-  const width = type === 'sequence' ? 180 : node.role === 'usecase' ? 180 : 200;
-  return { width, height: Math.max(70, 56 + (node.members?.length || 0) * 22) };
+  const groups=sourceGroups(node.evidence),count=Math.min(2,groups.length);
+  const extra = count ? groups.slice(0,2).reduce((h,g)=>h+(tagMode==='expanded'?35+Math.min(2,g.functions.length)*28+(g.functions.length>2?18:0):34),8)+(groups.length>2?22:0) : 0;
+  if (['decision', 'choice', 'merge'].includes(node.role)) return { width: count?190:116, height: 88+extra };
+  if (node.role === 'actor') return { width: count?220:140, height: 104+extra };
+  const width = tagMode==='expanded'&&count ? 280 : type === 'sequence' ? 210 : node.role === 'usecase' ? 210 : 220;
+  return { width, height: Math.max(70, 56 + (node.members?.length || 0) * 22)+extra };
 }
 
 // Sequence diagrams use message order, not a dependency layout: each message
 // attaches to its own position along a participant's lifetime.
-export function sequenceProjection(model) {
+export function sequenceProjection(model, tagMode = 'folded') {
   const messages = [...model.edges].sort((a, b) => a.order - b.order);
-  const height = Math.max(280, 125 + messages.length * 66);
-  const nodes = model.nodes.map((n, i) => ({ id: n.id, type: 'uml', position: { x: i * 260, y: 0 },
-    width: 180, height, style: { width: 180, height }, data: { node: n, sequence: true, messages, height } }));
+  const sizes=model.nodes.map(n=>nodeSize(n,'sequence',tagMode)),headerHeight=Math.max(60,...sizes.map(s=>s.height));
+  const height = Math.max(280, headerHeight+65 + messages.length * 66);
+  let x=0;
+  const nodes = model.nodes.map((n, i) => {const width=sizes[i].width,position={x,y:0};x+=width+80;return { id: n.id, type: 'uml', position,
+    width, height, style: { width, height }, data: { node: n, sequence: true, messages, height,headerHeight } };});
   const edges = messages.map((e, i) => ({ ...e, sourceHandle: `${e.id}-out`, targetHandle: `${e.id}-in`, sequenceIndex: i }));
   return { nodes, edges };
 }
@@ -65,12 +71,12 @@ export function wrapActivity(projection, model) {
   return {...projection,edges:model.edges.map(e=>{const a=cells.get(e.source),b=cells.get(e.target);return {...e,sourceHandle:a.row!==b.row?'bottom':a.column<b.column?'right':'left-out',targetHandle:a.row!==b.row?'top':a.column<b.column?'left':'right-in'};})};
 }
 
-export async function umlProjection(model) {
-  if (model.type === 'sequence') return sequenceProjection(model);
+export async function umlProjection(model, tagMode = 'folded') {
+  if (model.type === 'sequence') return sequenceProjection(model,tagMode);
   const { default: ELK } = await import('elkjs/lib/elk.bundled.js');
   const elk = new ELK();
   const containers = new Set(model.nodes.map(n => n.parentId).filter(Boolean));
-  const graphNodes = new Map(model.nodes.map(n => [n.id, { id: n.id, ...nodeSize(n, model.type), ...(containers.has(n.id) ? { children: [], layoutOptions: { 'elk.padding': '[top=48,left=24,bottom=24,right=24]' } } : {}) }]));
+  const graphNodes = new Map(model.nodes.map(n => [n.id, { id: n.id, ...nodeSize(n, model.type,tagMode), ...(containers.has(n.id) ? { children: [], layoutOptions: { 'elk.padding': `[top=${nodeSize(n,model.type,tagMode).height+24},left=24,bottom=24,right=24]` } } : {}) }]));
   const roots = [];
   for (const n of model.nodes) {
     const shape = graphNodes.get(n.id);

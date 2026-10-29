@@ -13,9 +13,23 @@
 
 ## 图形与布局
 
+### 嵌套源码标签与双视图
+
+节点名称始终表达业务含义。其下的灰蓝文件容器完整包含紫色函数标签；折叠时显示名称前缀（`mig…` 包含 `pub…`），展开时显示完整名称。颜色区分类型，不在小标签中重复 `file`／`func` 字样。同组前缀冲突自动加长；悬停和键盘焦点均提供完整路径、函数及位置。多个函数按文件分组，画布最多常显两组文件及每组两个函数，`+N` 可打开全部依据。
+
+“源码标签：折叠／展开”按项目保存在浏览器中。单击文件或函数标签直接打开对应快照位置，不触发第二次节点选择。调用处归入所在函数；分析器有目标定义时另列“被调用函数定义”。例如 migration.py 的 L79 属于 convert_legacy()，其 publish() 目标定义为 L31–46；同一行的 encode() 也作为真实目标保留。无法定位函数时只显示文件，不从 AI 文案猜测。
+
+“交互视图／标准 UML”共用文档、元素 ID 和选择，各自保存视口。交互视图使用 React Flow＋ELK 常显标签；标准视图使用本地 PlantUML 原生图形，节点和关系文字可点击、Enter 或空格定位，嵌套标签在底部检查窗呈现。标准视图支持平移、缩放、适应及 SVG／PlantUML 文本导出，切换与渲染不调用模型。
+
+标准视图首次提供“安装本地渲染运行时”入口。发行版本及 SHA-256 位于 `scripts/exploration/uml-runtime-lock.json`，本次为 Temurin JRE 21.0.13+9 与 PlantUML MIT 1.2026.9。当前锁定 macOS／Linux 的 ARM64、x64 包；其他平台明确显示暂不支持。依赖下载后校验、实际渲染探测，再原子发布到应用私有缓存；不会修改系统 Java。macOS 默认位于 `~/Library/Caches/code-strata/uml-runtime/`，Linux 为 `~/.cache/code-strata/uml-runtime/`，可用 `CODE_STRATA_UML_RUNTIME` 指定私有目录。已校验的下载保留以支持失败重试；离线部署可预置清单对应的完整运行时目录或校验包缓存。
+
+渲染采用 SANDBOX、内置 Smetana、最多两个并发、30 秒超时和 256 MiB JVM 堆限制，不使用公开渲染服务。应用只接受已保存图版本，不能提交任意 PlantUML 输入。文本进行语法转义，SVG 仅保留图形和内部元素映射；导出不会携带外部资源或脚本。标准视图不能无损表达某个活动图拓扑时明确说明，原文档与交互图保持可用。
+
+源映射以不可变快照及匹配分析器为准，按快照复用索引，旧版本的补齐结果单独缓存。新版本保存已验证函数元数据；历史版本不被回写。分析器变化而历史版本没有元数据时保留文件标签和原快照，提示显式更新。
+
 使用现有 React Flow 和 ELK。活动图、状态图按层级向下布局，较长的无分支活动链折行显示并保留真实连接顺序；类型、组件、用例和部署结构采用层级与容器布局。时序图使用独立生命线，按唯一 `order` 排列消息，支持同步消息、异步、返回、创建、销毁及自身调用。继承／实现使用空心三角，组合／聚合使用菱形，依赖及返回使用虚线。
 
-这是一套有明确类型及关系角色的源码阅读 UML 子集；不导入任意 PlantUML、Mermaid 或 HTML。不会把静态关系说成运行时调用栈、实际变量值或完整程序证明。长图初始缩放有可读性下限，可平移、缩放或点击适应全图。
+这是一套有明确类型及关系角色的源码阅读 UML 子集；可导出确定性生成的 PlantUML，不导入任意 PlantUML、Mermaid 或 HTML。不会把静态关系说成运行时调用栈、实际变量值或完整程序证明。长图初始缩放有可读性下限，可平移、缩放或点击适应全图。
 
 ## Agent 工具与证据
 
@@ -65,6 +79,10 @@
 | `GET /api/explore/diagrams/{id}?revision=1` | 指定版本；省略版本读取最新 |
 | `GET /api/explore/diagrams/{id}/versions` | 不可变版本列表 |
 | `POST /api/explore/diagrams/{id}/source` | `revision,path,startLine,endLine`；读取该图快照正文 |
+| `GET /api/explore/diagrams/{id}/source-map?revision=1` | `building/ready/failed/unavailable` 与逐元素证据、函数元数据；`retry=1` 重试失败索引 |
+| `POST /api/explore/diagrams/{id}/render` | 仅接受 `{revision}`；返回受限 SVG、PlantUML 文本、元素 ID 映射及渲染器版本 |
+| `GET /api/explore/uml-runtime` | 私有运行时可用性、平台、版本及安装进度 |
+| `POST /api/explore/uml-runtime` | `{install:true}` 显式开始或重试校验安装，不接受自由下载地址 |
 | `POST /api/explore/diagrams/{id}/check` | 可选 `revision`；返回逐文件状态及分析器变化 |
 | `POST /api/explore/diagrams/check` | `diagrams:[{id,revision}]`；最多 100 张，合并重复文件哈希读取 |
 | `GET /api/explore/diagrams/drafts` | 本项目未发布任务草稿 |

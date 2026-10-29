@@ -15,6 +15,8 @@ from .snapshots import capture, fingerprint
 from .store import Store
 from .tools import RUN_TOOLS, read_tool, validate_arguments, validate_view
 from .diagrams import validate_diagrams, source_evidence, DiagramConflict, ROLES, EDGE_ROLES, EDGE_TYPES
+from .source_map import SourceMaps, annotate_model
+from .uml_runtime import UmlRuntime
 
 
 class ConflictError(ValueError):
@@ -24,6 +26,7 @@ class ConflictError(ValueError):
 class ExplorationService:
     def __init__(self, settings, database=None, node=None, scc=None, work_dir=None, runner=None, timeout=900):
         self.store, self.settings = Store(database), settings
+        self.source_maps, self.uml_runtime = SourceMaps(self.store), UmlRuntime()
         self.node, self.scc, self.work_dir = node, scc, work_dir
         self.runner, self.timeout = runner or runners.execute, timeout
         self.lock = threading.RLock()
@@ -243,6 +246,13 @@ class ExplorationService:
                 elif name == 'save_diagrams':
                     project = self.store.conversation(job['conversationId'])['project']
                     job['pendingDiagrams'] = validate_diagrams(self.store, run_id, job['snapshotId'], project, args, job['target'], job['update'])
+                    session = job['session']
+                    if fingerprint(session.data) == job['snapshotId']:
+                        if session.model is None:
+                            session.build()
+                        if session.status in ('ready', 'partial'):
+                            for value in job['pendingDiagrams']:
+                                value['model'] = annotate_model(value['model'], session, self.store)
                     self.store.save_diagram_draft(run_id, project, job['pendingDiagrams'])
                     result = dict(saved='draft', diagramIds=[d['id'] for d in job['pendingDiagrams']], message='UML 草稿已校验，正常结束后原子保存')
                 elif name == 'save_view':
