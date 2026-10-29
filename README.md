@@ -8,7 +8,9 @@ Joern 的双语言分析验证作为独立实验维护，准备、运行与数�
 
 看板联动展示架构图与真实代码树，支持技术栈依据、代码行构成、语言与目录排名、静态引用及解析范围。扫描只读取目标项目，不执行项目代码；图中连线表示静态引用，功能测试与运行时行为仍需单独验证。
 
-看板现在支持 **文件依赖 → 函数关系 → 逻辑与变量**，JS/TS 与 Python 同步可用。函数视图由固定起点的调用层级树和当前分支关系图组成，支持“调用了谁 / 被谁调用”、逐层展开、多调用位置及定义定位；进入逻辑后返回保留原分支。源码只在左侧显示，与代码树联动；左侧面板可收起、调宽，层级树在窄窗口改用抽屉。使用与数据边界见 [三层浏览说明](references/code-browser.md)，实测见 [验证结果](references/code-browser-results.md)。
+主界面采用 **项目级多图 UML 工作区**：左侧项目目录，中间文档 Tab 和 UML，右侧 Agent 会话。支持活动图、时序图、类图、组件图、状态图、用例图和部署图；节点及连线可打开底部“快照源码＋AI 解释”，联动目录高亮。技术栈、工程统计和解析范围位于顶栏“项目概览”。使用、数据合约及可复现示例见 [UML 工作区](references/uml-workspace.md)。
+
+原有文件依赖、函数关系、调用层级和函数逻辑查询接口仍保留，供 Agent 查询及历史阅读图使用；旧三层浏览器不再作为常驻主界面。[三层查询说明](references/code-browser.md) 与 [历史验证结果](references/code-browser-results.md) 记录其分析边界。
 
 ## 运行要求
 
@@ -81,13 +83,17 @@ python3 scripts/scan.py /absolute/project/path --output /absolute/output/archite
 
 ## Agent 探索
 
-打开本地项目后，切换到 **功能解读**，选择 Agent 并描述要理解的功能。左侧显示阅读图，右侧通高会话滑窗保存聊天与真实工具记录；点击节点或连线，在图区域的源码弹窗查看分析时的代码。每个会话固定一种 Agent，同时执行一个任务，维护一张当前图；后续轮次使用设置中该 Agent 的模型和参数。
+打开本地项目，在右侧会话选择 Agent，描述想了解的功能及图类型，例如“画出配置迁移的活动图，说明为什么先备份，再发布”。Agent 使用本轮源码查询或读取返回的证据生成图；可在一轮提交多张图。文档按规范化项目路径共享，切换会话保持图集。关闭 Tab 只隐藏标签，点击图列表重新打开；标签顺序、当前图、各版本的选择和视口保存在当前浏览器。
 
-会话滑窗从页面顶部延伸到底部，桌面默认约占三分之一，左侧代码图随宽度调整。拖动左边界调宽，方向键每次调整 24px（Shift 为 48px），双击恢复默认宽度，偏好在当前浏览器保存。点右上角收起，或按 Esc 关闭当前菜单/源码弹窗后收起会话；页面顶栏“会话”可在代码地图、文件浏览和功能解读中独立展开、收起，图右上角也可重新打开。收起不取消任务，也不清空草稿、历史或阅读图。窄屏使用覆盖式滑窗，手机尺寸占满视口；阅读历史、新主题、复制会话 ID 和输入框都位于滑窗内。
+会话从页面顶部延伸到底部，支持拖动左边界调宽、方向键调整和 Esc 收起。收起不会取消任务。目录默认宽 240px，可收起和调整；中间不足 720px 时改为目录抽屉。图中节点、连线和源码依据位置可通过键盘访问；底部检查窗可拖动或用方向键调高，窄窗口将源码和解释上下排列。
 
-工具提供 Python/TS 静态关系和源码依据；Agent 负责范围、分组、阅读顺序和解释。调用边只能引用本轮查询返回的 ID，确定性保持原状；调用、导入和函数结构分别呈现。点击“发送”才调用模型并向其提供查询到的源码；不执行目标项目代码。CLI 登录、原生会话和联网由各 CLI 管理。Codex、OpenCode、Claude Code 使用单次 MCP 配置，dsh 通过 ACP 注入 MCP，Pi 使用工具扩展与 RPC。
+`save_diagrams` 接收结构化 UML，不执行模型提供的 HTML 或脚本。源码推导的业务步骤、分支、状态、角色和模块会标为推导；分析器确认的调用、导入、候选和未解析状态保持原样。每图最多 100 个节点、300 条关系。全部图验证通过且任务成功后原子发布；失败或取消保留原图，版本冲突保留草稿供恢复。每个会话仍固定一种 Agent，同时执行一个任务。
 
-会话、图和源码快照保存到 `$XDG_DATA_HOME/code-strata/exploration.sqlite3`，默认 `~/.local/share/code-strata/exploration.sqlite3`；可用 `serve.py --history-db /absolute/history.sqlite3` 指定位置。源码按内容去重，历史消息绑定各自的快照，重启后可恢复。打开会话、重新扫描时检查整个扫描范围的源码、配置和分析器变化，保守地标记“已过时”，覆盖新增调用方。点击“让 Agent 更新”才分析当前代码；正常完成并通过证据校验后替换图，失败或停止保留原图，历史源码仍可读。
+会话、项目图、不可变版本和源码快照保存到 `$XDG_DATA_HOME/code-strata/exploration.sqlite3`，默认 `~/.local/share/code-strata/exploration.sqlite3`；可用 `serve.py --history-db /absolute/history.sqlite3` 指定。旧会话阅读图会幂等导入图集并标注“旧版阅读图”，保留旧渲染与快照；明确重新生成才转换为 UML。
+
+图始终显示生成版本绑定的源码正文。打开项目、页面重新获得焦点、手动扫描及页面可见时每 30 秒检查已打开图的依据文件，合并重复文件读取，不调用模型。无关文件变化不会直接使图过期；依据文件修改、删除和检查失败分别标记。文件移动按旧路径删除处理，不猜测新位置，仍可从历史文件入口读取旧源码。点击“根据当前代码更新”才调用 Agent、重新捕获源码并生成新版本；失败、取消或冲突保留当前版本。旧版本可从版本列表打开。
+
+点击发送或明确更新才调用模型并向所选 Agent 提供查询到的源码；不执行目标项目代码。CLI 登录、原生会话和联网由各 CLI 管理。Codex、OpenCode、Claude Code 使用单次 MCP 配置，dsh 通过 ACP 注入 MCP，Pi 使用工具扩展与 RPC。
 
 ### 外部 Agent 读取历史
 
@@ -99,7 +105,7 @@ python3 scripts/scan.py /absolute/project/path --output /absolute/output/archite
 {"mcpServers":{"code-strata-history":{"command":"python3","args":["/absolute/code-strata/scripts/exploration_mcp.py","--stdio"]}}}
 ```
 
-服务直接以只读模式查询 SQLite，不依赖网页或 HTTP 服务存活。自定义数据库在 args 中追加 `--database /absolute/history.sqlite3`。提供 `get_conversation(id,cursor,limit)`、`get_view(id)`、`read_snapshot_source(id,snapshotId,path,startLine,endLine)`；不暴露生成图或修改会话的能力。聊天每页最多 100 条，源码每次最多 300 行，返回 `nextCursor`/`nextLine`；消息的 `snapshot_id` 指向其原始源码。ID 是记录定位符，访问权限来自本机数据文件权限，不是公开分享链接。
+服务直接以只读模式查询 SQLite，不依赖网页或 HTTP 服务存活。自定义数据库在 args 中追加 `--database /absolute/history.sqlite3`。提供 `get_conversation(id,cursor,limit)`、`get_view(id)`、`read_snapshot_source(id,snapshotId,path,startLine,endLine)`，以及按会话项目范围读取的 `list_diagrams(id,offset,limit)`、`get_diagram(id,diagramId,revision)`；不暴露生成图或修改会话的能力。聊天每页最多 100 条，源码每次最多 300 行，返回 `nextCursor`/`nextLine`；消息的 `snapshot_id` 指向其原始源码。ID 是记录定位符，访问权限来自本机数据文件权限，不是公开分享链接。
 
 也可以直接查询：
 

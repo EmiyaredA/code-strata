@@ -12,7 +12,7 @@ import { readingQuestion, readingPrompt, readingMessage } from "./reading-naviga
 import "./exploration.css";
 import "./chat-drawer.css";
 
-export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog, onSettings, onLocate, navigation }) {
+export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog, onSettings, onLocate, navigation, chatOnly = false, diagramContext, requestRef, onRunStart, onDiagrams, onExternalSource }) {
   const project = data.project.root, enabled = active || drawer.open;
   const [items, setItems] = useState([]), [selected, setSelected] = useState(null), [conversation, setConversation] = useState(null);
   const [sidebar, setSidebar] = useState(false), [agent, setAgent] = useState("codex"), [settings, setSettings] = useState(null), [probes, setProbes] = useState([]);
@@ -21,7 +21,7 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
   const [context, setContext] = useState(null), [locating, setLocating] = useState(false), [locateError, setLocateError] = useState("");
   const drafts = useRef(new Map()), handledEntry = useRef(null), chatPositions = useRef(new Map()), configuredProject = useRef(null), selectionEpoch = useRef(0);
   const draftKey = (root, id) => `${root}\0${id || "new"}`;
-  const bottom = useRef(null), chat = useRef(null), pinned = useRef(true), current = useRef({ selected, project }), sourceSerial = useRef(0);
+  const bottom = useRef(null), chat = useRef(null), pinned = useRef(true), current = useRef({ selected, project }), sourceSerial = useRef(0), deliveredDiagrams = useRef(new Set()), initiatedRun = useRef(null);
   current.current = { selected, project };
   const running = conversation?.run?.status === "running", view = conversation?.view;
   const fresh = conversation?.freshness?.status || "unchecked";
@@ -80,7 +80,7 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
     let disposed = false, timer;
     const controller = new AbortController();
     if (conversation?.id !== selected) setLoading(true);
-    api(`/api/explore/conversations/${selected}/check`, {}, controller.signal).catch(e => { if (!disposed && e.name !== "AbortError") setError({ message: e.message, connection: true }); });
+    if (!chatOnly) api(`/api/explore/conversations/${selected}/check`, {}, controller.signal).catch(e => { if (!disposed && e.name !== "AbortError") setError({ message: e.message, connection: true }); });
     async function refresh() {
       try {
         const result = await loadConversation(selected, controller.signal);
@@ -116,12 +116,12 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
     setConversation(null); setSource(null); setSourceLoading(false); setLocating(false); setSummary(false); setLocateError(""); setLoading(Boolean(id)); sourceSerial.current++;
     try { if (id) localStorage.setItem("strata-explore:" + project, id); else localStorage.removeItem("strata-explore:" + project); } catch { /* optional */ }
   }
-  async function send(update = false) {
-    const question = update ? "请基于当前代码重新查询、更新这张阅读图，并说明主要变化。" : text.trim();
+  async function send(update = false, override) {
+    const question = override || (update ? "请基于当前代码重新查询、更新这张阅读图，并说明主要变化。" : text.trim());
     if (!question || sending || running) return;
     const prompt = readingPrompt(question, !selected ? context : null);
     if (prompt.length > 12000) { setError("问题与代码范围合计最多 12000 字，请缩短问题后重试。"); return; }
-    setSending(true); setError("");
+    setSending(true); setError(""); onRunStart?.();
     const atProject = project, epoch = selectionEpoch.current;
     try {
       let id = selected;
@@ -129,7 +129,8 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
         const created = await api("/api/explore/conversations", { agentId: agent, title: question.slice(0, 45) });
         id = created.id;
       }
-      await api(`/api/explore/conversations/${id}/messages`, { text: prompt, update });
+      const started = await api(`/api/explore/conversations/${id}/messages`, { text: prompt, update, ...(diagramContext ? { diagramId: diagramContext.id, expectedRevision: diagramContext.expectedRevision } : {}) });
+      initiatedRun.current = started.id;
       if (current.current.project !== atProject || selectionEpoch.current !== epoch) return;
       if (current.current.selected !== selected) return;
       drafts.current.delete(draftKey(project, selected));
@@ -145,6 +146,20 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
     } catch (e) { if (current.current.project === atProject && selectionEpoch.current === epoch) setError(e.message); }
     finally { setSending(false); }
   }
+  useEffect(() => {
+    if (requestRef) requestRef.current = async ({question, update = false, prepare = false}) => {
+      if (prepare) { editText(question); return; }
+      return send(update, question);
+    };
+  });
+  useEffect(() => {
+    for (const message of conversation?.history.messages || []) {
+      if (message.kind === 'diagrams' && message.run_id === initiatedRun.current && conversation.run?.status === 'completed' && !deliveredDiagrams.current.has(message.seq)) {
+        deliveredDiagrams.current.add(message.seq);
+        if (message.run_id === conversation.run?.id && conversation.run?.status === 'completed') onDiagrams?.(message.content.diagramIds);
+      }
+    }
+  }, [conversation?.run?.id, conversation?.run?.status, conversation?.history.messages.length]);
   async function stop() {
     try { await api(`/api/explore/conversations/${selected}/cancel`, {}); }
     catch (e) { setError(e.message); }
@@ -152,6 +167,7 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
   const openSource = useCallback(async (node) => {
     const id = current.current.selected, snapshotId = node.snapshotId || conversation?.view?.snapshotId || conversation?.run?.snapshot_id;
     if (!id || !node.path || !snapshotId) return;
+    if (chatOnly && onExternalSource) { onExternalSource(node, id, snapshotId); return; }
     const serial = ++sourceSerial.current, line = node.range?.start[0] || 1;
     setSourceLoading(true); setError("");
     try {
@@ -180,7 +196,7 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
   const selectedAgent = conversation?.agent_id || agent, detected = probes.find(p => p.id === selectedAgent);
   const messages = conversation?.history.messages || [];
   const sourceDialog = source && <SourceDialog file={source.file} line={source.line} onClose={() => { sourceSerial.current++; setSource(null); setLocating(false); setSourceLoading(false); }} onLocate={locateSource} locating={locating} locateError={locateError} onPage={line => openSource({...source.target, startLine:line})}/>;
-  return <section className="exploration-workspace" style={active ? undefined : { display: "none" }} aria-label="功能解读">
+  return <section className={`exploration-workspace ${chatOnly ? "uml-chat-only" : ""}`} style={active ? undefined : { display: "none" }} aria-label="功能解读">
     <div className="explore-body">
       <div className="explore-canvas">
         <div className="explore-canvas-bar workspace-canvas-toolbar">{navigation}<span className="explore-canvas-title" title={view?.title || "功能阅读图"}><GitBranch size={15}/><span>{view?.title || "功能阅读图"}</span></span><div className="explore-canvas-actions">{view && <button className="text-button" onClick={() => setSummary(v => !v)}>{summary ? "收起图说明" : "图说明"}</button>}{!drawer.open && <button className="text-button explore-open-chat" data-chat-opener onClick={() => drawer.setOpen(true)}><PanelRightOpen size={16}/>展开会话</button>}</div></div>
@@ -206,7 +222,7 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
         </section>}
         <div className="explore-messages" ref={chat} style={sidebar ? {display:"none"} : undefined} onScroll={() => { const el = chat.current; pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90; chatPositions.current.set(draftKey(project, selected), el.scrollTop); }}>
           {loading && <p className="explore-chat-hint"><LoaderCircle size={14} className="spin"/>正在读取阅读主题</p>}
-          {!messages.length && !loading && <div className="explore-chat-welcome"><MessageSquare size={23}/><h3>你想读懂哪一段实现？</h3><p>可以给出功能名称、函数名或文件路径。Agent 会先查证，再构造图。</p>{["帮我找到项目的主要入口，并画出关键调用关系", "解释一个函数的实现，并展开它调用的关键函数"].map(prompt => <button key={prompt} onClick={() => editText(prompt)}>{prompt}</button>)}</div>}
+          {!messages.length && !loading && <div className="explore-chat-welcome"><MessageSquare size={23}/><h3>你想读懂哪一段实现？</h3><p>可以给出功能名称、函数名或文件路径。Agent 会先查证，再构造图。</p>{["帮我找到项目的主要入口，并画出关键调用关系", "画出这个功能的活动图、时序图和模块组件图"].map(prompt => <button key={prompt} onClick={() => editText(prompt)}>{prompt}</button>)}</div>}
           {conversationRecords(messages).map(message => {
             const content = message.content, snapshotId = message.snapshot_id;
             const sourceFromMessage = node => { if (snapshotId) openSource({ ...node, snapshotId }); };
@@ -220,6 +236,7 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
               </div></details>;
             }
             if (message.kind === "tool_result") return <details key={message.seq} className={`explore-tool ${content.error ? "is-error" : ""}`}><summary>{content.error ? "调用失败" : "已返回依据"} · {content.name}</summary><pre>{content.error || JSON.stringify(content.result, null, 2)}</pre></details>;
+            if (message.kind === "diagrams") return <p key={message.seq} className="explore-run-status">已保存 {content.diagramIds.length} 张项目 UML 图</p>;
             if (message.kind === "status") return <p key={message.seq} className={`explore-run-status is-${content.status}`}>{content.text}</p>;
             if (message.kind === "error_details") return <details key={message.seq} className="explore-tool is-error"><summary>运行诊断</summary><pre>{content.text}</pre></details>;
             const display = message.role === "user" ? readingMessage(content.text || "") : null;
@@ -230,7 +247,7 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
         {error && !sidebar && <div className="explore-error" role="alert">{typeof error === 'string' ? error : error.message}</div>}
         <form className="explore-composer" style={sidebar ? {display:"none"} : undefined} onSubmit={e => { e.preventDefault(); send(); }}>
           {context && !selected && <div className="explore-code-context"><strong>{context.kind === "group" ? "模块" : context.kind === "file" ? "文件" : "函数"} · {context.name}</strong><small>{context.path || `${context.files?.length || 0} 个文件`}{context.range ? `:${context.range.start[0]}` : ""}</small><small>来源快照 {context.snapshotId.slice(0, 8)} · 发送时重新查询</small></div>}
-          {view && <div className="drawer-view-context" title={view.title}><GitBranch size={13}/>已关联当前阅读图</div>}
+          {diagramContext ? <div className="drawer-view-context" title={diagramContext.title}><GitBranch size={13}/>已关联 {diagramContext.title}</div> : view && !chatOnly && <div className="drawer-view-context" title={view.title}><GitBranch size={13}/>已关联当前阅读图</div>}
           {!selected && <div className="explore-agent-select"><span>本会话 Agent</span><SelectMenu label="本会话 Agent" value={agent} disabled={sending || !drawer.open} onChange={setAgent} className="explore-agent-trigger" popupClassName="explore-agent-menu" align="end" options={Object.entries(agentNames).map(([value, label]) => ({value, label, icon:<AgentLogo id={value} size={17}/>}))}/></div>}
           {!selected && detected?.status !== "detected" && <small className="explore-config-hint">{detected?.message || "请先配置本地 Agent CLI"} <button type="button" className="text-button" onClick={onSettings}>配置 Agent</button></small>}
           <textarea value={text} onChange={e => editText(e.target.value)} maxLength={12000} rows={3} placeholder={running ? "可先写好下一个问题" : selected ? "继续追问，或选中图中的节点…" : "描述功能，或选择代码后解读…"} aria-label="向 Agent 提问" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}/>

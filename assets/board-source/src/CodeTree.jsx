@@ -1,9 +1,9 @@
 import React, { useMemo, useRef } from "react";
 import { FileCode2, Folder, ChevronDown, ChevronRight } from "lucide-react";
-import { makeTree } from "./model.js";
+import { makeTree, parents } from "./model.js";
 import { inventoryFiles } from "./InventoryPanels.jsx";
-function Tree({ data, expanded, setExpanded, linked, focusId, onFile }) {
-  const ref = useRef(null), tree = useMemo(() => makeTree(inventoryFiles(data)), [data]);
+function Tree({ data, expanded, setExpanded, linked, focusId, onFile, includeConfigs = false, hiddenFiles = [] }) {
+  const ref = useRef(null), tree = useMemo(() => makeTree((includeConfigs ? (data.inventory || data.files) : inventoryFiles(data)).filter(f=>!hiddenFiles.includes(f.id))), [data, includeConfigs, hiddenFiles.join("|")]);
   function toggle(id) {
     setExpanded((old) => {
       const next = new Set(old);

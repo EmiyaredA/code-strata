@@ -8,6 +8,8 @@ from pathlib import Path
 import sqlite3
 import uuid
 
+from .diagrams import DiagramStore
+
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -24,7 +26,7 @@ def default_database():
     return root / "code-strata" / "exploration.sqlite3"
 
 
-class Store:
+class Store(DiagramStore):
     def __init__(self, path=None, readonly=False):
         self.path = Path(path or default_database()).expanduser().resolve()
         self.readonly = readonly
@@ -35,6 +37,7 @@ class Store:
         os.close(descriptor)
         os.chmod(self.path, 0o600)
         self._initialize()
+        self._initialize_diagrams()
 
     def acquire_owner(self):
         """Only one app service may recover/write runs; history readers stay independent."""
@@ -182,15 +185,21 @@ class Store:
             db.execute("UPDATE runs SET native_session_id=? WHERE id=?", (identifier, run_id))
             db.execute("UPDATE conversations SET native_session_id=? WHERE id=(SELECT conversation_id FROM runs WHERE id=?)", (identifier, run_id))
 
-    def finish(self, run_id, status, error=None, view=None):
+    def finish(self, run_id, status, error=None, view=None, diagrams=None):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             run = db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
             if not run or run['status'] != 'running':
                 return
+            if diagrams and status == 'completed':
+                self._commit_diagrams(db, run, diagrams)
+                db.execute('UPDATE conversations SET snapshot_id=?,updated_at=? WHERE id=?', (diagrams[-1]['model']['snapshotId'], now(), run['conversation_id']))
             if view is not None and status == 'completed':
                 db.execute("UPDATE conversations SET view_json=?,snapshot_id=?,updated_at=? WHERE id=?",
                            (encoded(view), view['snapshotId'], now(), run['conversation_id']))
+                self._import_legacy(db, dict(db.execute('SELECT * FROM conversations WHERE id=?', (run['conversation_id'],)).fetchone()))
+            if diagrams and status == 'completed':
+                self._message(db, run['conversation_id'], run_id, 'system', 'diagrams', {'diagramIds': [d['id'] for d in diagrams]})
             db.execute("UPDATE runs SET status=?,error=?,finished_at=? WHERE id=?", (status, error, now(), run_id))
             self._message(db, run['conversation_id'], run_id, 'system', 'status', {"status": status, "text": error or "本轮阅读完成"})
 

@@ -46,10 +46,21 @@ def tools():
         focus = next(n for n in found['nodes'] if n['kind'] == 'function' and n['name'] == 'complete'
                      and (not os.environ.get('STRATA_EXPLORATION_TS') or n['path'].endswith('.ts')))
         graph = call('query_code', dict(view='functions', focusId=focus['id'], hops=2))
-        call('read_source', dict(path=focus['path'], startLine=1, endLine=12))
+        source = call('read_source', dict(path=focus['path'], startLine=1, endLine=12))
         view = dict(title='完成处理的调用关系', view='functions', nodes=[n['id'] for n in graph['nodes']],
                     relations=[r['id'] for r in graph['relations']], explanation='入口调用校验函数，边均来自源码。')
-        if mode == 'invalid':
+        if mode.startswith('uml'):
+            docs = []
+            for kind, roles in [('activity', ('action', 'action', 'flow')), ('sequence', ('participant', 'participant', 'message'))]:
+                docs.append(dict(type=kind, title='完成处理 '+kind, purpose='核对真实 MCP 生成和多图原子发布。',
+                    nodes=[dict(id=n, label=n, role=role, evidenceIds=[source['evidenceId']], explanation='依据已读取的函数源码。') for n,role in zip(('complete','validate'),roles[:2])],
+                    edges=[dict(id='call', source='complete', target='validate', role=roles[2], evidenceIds=[source['evidenceId']], explanation='源码推导。', order=0)]))
+            if os.environ.get('STRATA_EXPLORATION_DIAGRAM'):
+                target = call('get_diagram', dict(diagramId=os.environ['STRATA_EXPLORATION_DIAGRAM']))
+                docs = docs[:1]
+                docs[0].update(id=target['id'],expectedRevision=target['revision'])
+            call('save_diagrams', dict(diagrams=docs))
+        elif mode == 'invalid':
             view['relations'] = ['fabricated-call']
             result = rpc('tools/call', dict(name='save_view', arguments=view))
             assert result['isError']
@@ -57,9 +68,9 @@ def tools():
             call('save_view', view)
         child.stdin.close()
         child.wait(timeout=3)
-    if mode == 'hold':
+    if mode in ('hold', 'uml_hold'):
         time.sleep(30)
-    if mode == 'failure':
+    if mode in ('failure', 'uml_failure'):
         raise RuntimeError('failure after graph draft')
 
 

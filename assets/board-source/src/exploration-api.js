@@ -51,9 +51,9 @@ export function conversationRecords(messages) {
 }
 
 export function toolRecordTitle(content) {
-  const labels = { search_code: '搜索代码', query_code: '查询代码关系', read_source: '读取源码', save_view: '整理阅读图' };
+  const labels = { search_code: '搜索代码', query_code: '查询代码关系', read_source: '读取源码', save_view: '整理旧阅读图', save_diagrams: '生成 UML', list_diagrams: '读取项目图集', get_diagram: '读取 UML 版本' };
   const args = content.arguments || {};
-  const scope = content.name === 'search_code' ? args.text : content.name === 'read_source' ? args.path : content.name === 'save_view' ? args.title :
+  const scope = content.name === 'search_code' ? args.text : content.name === 'read_source' ? args.path : content.name === 'save_diagrams' ? args.diagrams?.map(d=>d.title).join('、') : content.name === 'save_view' ? args.title :
     { functions: '函数调用', files: '文件依赖', logic: '函数结构', symbols: '源码符号', references: '符号引用' }[args.view];
   return { label: labels[content.name] || '分析代码', scope: scope || '' };
 }

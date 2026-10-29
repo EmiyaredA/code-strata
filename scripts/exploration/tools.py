@@ -5,7 +5,7 @@ from .store import encoded
 def tool(name, description, properties, required=()):
     return dict(name=name, description=description, inputSchema=dict(type='object', properties=properties,
                 required=list(required), additionalProperties=False),
-                annotations=dict(readOnlyHint=name != 'save_view', destructiveHint=False, openWorldHint=False,
+                annotations=dict(readOnlyHint=name not in ('save_view', 'save_diagrams'), destructiveHint=False, openWorldHint=False,
                                  idempotentHint=True))
 
 
@@ -22,7 +22,7 @@ RUN_TOOLS = [
     tool('search_code', '在本轮绑定的 Python/TS 静态分析快照中搜索文件、类、函数、变量；支持分页。',
          dict(text=STRING, offset=INTEGER, limit=dict(type='integer', minimum=1, maximum=100)), ['text']),
     tool('query_code', '查询静态代码关系。functions 为函数间调用；logic 为单函数结构简图，非运行轨迹或完整 CFG。返回节点/关系 ID 可交给 save_view。',
-         dict(view=dict(type='string', enum=['files', 'symbols', 'functions', 'logic', 'references']),
+         dict(view=dict(type='string', enum=['files', 'symbols', 'functions', 'logic', 'references', 'hierarchy']),
               focusId=STRING, hops=dict(type='integer', minimum=1, maximum=5), offset=INTEGER, edgeOffset=INTEGER,
               limit=dict(type='integer', minimum=1, maximum=100)), ['view']),
     tool('read_source', '读取本轮快照中的源码或配置正文（包括 HTML、CSS、package.json 等已捕获文本），不要求支持语义解析，不能读取实时磁盘文件。最多 300 行。',
@@ -36,6 +36,36 @@ RUN_TOOLS = [
               explanation=STRING), ['title', 'view', 'nodes', 'relations']),
 ]
 
+
+
+# Declarative UML, not executable markup. The backend validates nested objects,
+# canonical evidence, type-specific roles and all expected document revisions.
+UML_NODE = dict(type='object', additionalProperties=False, properties=dict(
+    id=STRING, label=STRING, role=STRING, evidenceIds=dict(type='array', items=STRING, maxItems=30),
+    explanation=STRING, members=dict(type='array', items=STRING, maxItems=100), parentId=STRING),
+    required=['id', 'label', 'role', 'evidenceIds', 'explanation'])
+UML_EDGE = dict(type='object', additionalProperties=False, properties=dict(
+    id=STRING, source=STRING, target=STRING, role=STRING, label=STRING, guard=STRING,
+    evidenceIds=dict(type='array', items=STRING, maxItems=30), explanation=STRING, order=INTEGER),
+    required=['id', 'source', 'target', 'role', 'evidenceIds', 'explanation'])
+UML_DOCUMENT = dict(type='object', additionalProperties=False, properties=dict(
+    id=STRING, expectedRevision=INTEGER, type=dict(type='string', enum=['activity','sequence','class','component','state','usecase','deployment']),
+    title=STRING, purpose=STRING, explanation=STRING,
+    nodes=dict(type='array', items=UML_NODE, minItems=1, maxItems=100),
+    edges=dict(type='array', items=UML_EDGE, maxItems=300)), required=['type','title','purpose','nodes','edges'])
+RUN_TOOLS += [
+    tool('list_diagrams', '分页读取本项目共享图集摘要。图由所有会话共享，关闭标签不会删除图。',
+         dict(offset=INTEGER, limit=dict(type='integer', minimum=1, maximum=100))),
+    tool('get_diagram', '读取项目共享图的指定或最新版本。更新前读取 current_revision，引用旧图不能替代本轮重新查询源码。',
+         dict(diagramId=STRING, revision=INTEGER), ['diagramId']),
+    tool('get_diagram_draft', '读取本项目失败或冲突任务保留的 UML 草稿；旧依据必须在本轮重新查询。', dict(runId=STRING), ['runId']),
+    tool('save_diagrams', '提交 1–12 张有源码依据的 UML 草稿。新图不传 id；更新传 id 和 expectedRevision。只在本轮正常结束后原子保存。evidenceIds 只能来自本轮 query_code/search_code/read_source。语义关系默认源码推导，不能伪造已确认调用。',
+         dict(diagrams=dict(type='array', items=UML_DOCUMENT, minItems=1, maxItems=12)), ['diagrams']),
+]
+READ_TOOLS += [
+    tool('list_diagrams', '分页读取此会话所属项目共享图集摘要。', dict(id=STRING, offset=INTEGER, limit=dict(type='integer', minimum=1, maximum=100)), ['id']),
+    tool('get_diagram', '读取此会话所属项目的图及版本。', dict(id=STRING, diagramId=STRING, revision=INTEGER), ['id','diagramId']),
+]
 
 def validate_arguments(name, args, definitions):
     definition = next((t for t in definitions if t['name'] == name), None)
@@ -94,6 +124,10 @@ def validate_view(store, run_id, snapshot_id, args):
 def read_tool(store, name, args):
     validate_arguments(name, args, READ_TOOLS)
     conv = store.conversation(args['id'])
+    if name == 'list_diagrams':
+        return store.list_diagrams(conv['project'], args.get('offset', 0), args.get('limit', 50))
+    if name == 'get_diagram':
+        return store.diagram(conv['project'], args['diagramId'], args.get('revision'))
     if name == 'get_conversation':
         return store.history(args['id'], args.get('cursor', 0), args.get('limit', 100))
     if name == 'get_view':

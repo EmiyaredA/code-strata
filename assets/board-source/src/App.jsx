@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ReactFlowProvider } from "@xyflow/react";
 import {
   Boxes,
   Search,
@@ -16,29 +15,23 @@ import {
   RefreshCw,
   LoaderCircle,
   Settings,
+  Layers,
   PanelRightOpen,
   PanelRightClose,
 } from "lucide-react";
 import { demo } from "./demo.js";
-import { parents, searchProject, selectionInfo } from "./model.js";
+import { searchProject } from "./model.js";
 import {
   ProjectOverview,
   InspectionPanel,
-  ModuleStatistics,
-  inventoryFiles,
 } from "./InventoryPanels.jsx";
-import { ArchitectureGraph } from "./Graph.jsx";
-import { CodeBrowser } from "./CodeBrowser.jsx";
-import { CodeSidebar } from "./CodeSidebar.jsx";
 import "./workspace-toolbar.css";
-import {usePanelResize, PanelResize} from "./PanelResize.jsx";
 import { highlightedLines } from "./syntax.js";
 import { SyntaxText } from "./SyntaxCode.jsx";
-import { Tree } from "./CodeTree.jsx";
 import { AgentSettings } from "./AgentSettings.jsx";
+import { UmlWorkspace } from "./UmlWorkspace.jsx";
 import { ExplorationWorkspace } from "./ExplorationWorkspace.jsx";
 import { useChatDrawer } from "./ChatDrawer.jsx";
-import { readingContext, locateInMap } from "./reading-navigation.js";
 import { apiFetch } from './api-fetch.js';
 import "@xyflow/react/dist/style.css";
 const token = () =>
@@ -293,58 +286,10 @@ function SourceDialog({ file, line, onClose, onPage, onLocate, locating, locateE
   );
 }
 export function App() {
-  const architectureSplit = usePanelResize("architecture-left", 300, "left");
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    try { const saved = localStorage.getItem("code-strata:sidebar-open"); return saved == null ? window.innerWidth >= 900 : saved !== "false"; } catch { return true; }
-  });
-  function toggleSidebar() {
-    setSidebarOpen(value => { const next = !value; try { localStorage.setItem("code-strata:sidebar-open", String(next)); } catch {} return next; });
-  }
   const chatDrawer = useChatDrawer();
-  const [data, setData] = useState(demo),
-    [selection, setSelection] = useState({ kind: "group", id: "save" }),
-    [allTree, setAllTree] = useState(false),
-    [expanded, setExpanded] = useState(
-      new Set(demo.groups[0].files.flatMap(parents)),
-    );
-  const [inspector, setInspector] = useState(null);
-  const [codeActive, setCodeActive] = useState(false), [codeEntry, setCodeEntry] = useState(null);
-  const [workspace, setWorkspace] = useState("map"), [exploreOpened, setExploreOpened] = useState(false);
-  const exploreActive = workspace === "reading";
-  const [readingEntry, setReadingEntry] = useState(null);
-  const locationRequest = useRef(null), liveData = useRef(data);
-  liveData.current = data;
-  useEffect(() => () => locationRequest.current?.abort(), [data.project.root, data.snapshot.id]);
-  function explainCode(target) {
-    const context = readingContext(data, target);
-    if (!context) return;
-    setReadingEntry({ ...context, serial: ++entrySerial.current });
-    setExploreOpened(true);
-    setWorkspace("reading");
-    chatDrawer.setOpen(true);
-  }
-  async function locateCode(target, isCurrent = () => true) {
-    locationRequest.current?.abort();
-    const controller = new AbortController();
-    locationRequest.current = controller;
-    const at = data;
-    const located = await locateInMap(at, target, undefined, controller.signal);
-    if (controller.signal.aborted || liveData.current !== at || !isCurrent()) return false;
-    if (located.error) throw new Error(located.error);
-    setCodeEntry({ ...located.entry, notice: located.notice, serial: ++entrySerial.current });
-    setCodeActive(true);
-    setWorkspace("map");
-    return true;
-  }
+  const [data, setData] = useState(demo), [inspector, setInspector] = useState(null);
+  const [overviewOpen, setOverviewOpen] = useState(false), [umlSourceEntry, setUmlSourceEntry] = useState(null);
   const entrySerial = useRef(0);
-  function browseCode(target = selection) {
-    if (!data.project.root) return;
-    const group = target?.kind === "group" ? data.groups.find(g => g.id === target.id) : null;
-    const path = target?.kind === "file" ? target.id : group?.files[0] || info.files[0];
-    setCodeEntry({serial: ++entrySerial.current, view: "files", focusId: path, path, groupId: group?.id, title: group?.title || path?.split("/").at(-1) || "文件依赖"});
-    setCodeActive(true);
-    setWorkspace("map");
-  }
   const [modal, setModal] = useState(null),
     [query, setQuery] = useState(""),
     [searchOpen, setSearchOpen] = useState(false),
@@ -352,32 +297,11 @@ export function App() {
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState("");
   const statisticsView = ["metrics", "coverage"].includes(modal?.kind) ? modal : modal?.returnTo;
-  const searchRef = useRef(null),
-    panelRef = useRef(null),
-    info = useMemo(() => selectionInfo(data, selection), [data, selection]),
-    linked = useMemo(() => new Set(info.files), [info]);
-  const focusId = selection?.kind === "file" ? selection.id : info.files[0],
-    activeFile = data.files.find((f) => f.id === focusId),
-    results = useMemo(() => searchProject(data, query), [data, query]);
+  const searchRef = useRef(null);
+  const results = useMemo(() => searchProject(data, query), [data, query]);
   function load(next) {
-    const sameProject = data.project.root && data.project.root === next.project.root;
-    setData(next);
-    if (!sameProject) { setCodeActive(false); setCodeEntry(null); setWorkspace("map"); setReadingEntry(null); }
-    setInspector(null);
-    const degrees = new Map();
-    for (const edge of next.edges) { degrees.set(edge.source,(degrees.get(edge.source)||0)+1); degrees.set(edge.target,(degrees.get(edge.target)||0)+1); }
-    const first = [...next.groups].filter(g=>g.files.length).sort((a,b)=>(degrees.get(b.id)||0)-(degrees.get(a.id)||0))[0],
-      s = first
-        ? { kind: "group", id: first.id }
-        : inventoryFiles(next)[0]
-          ? { kind: "file", id: inventoryFiles(next)[0].id }
-          : null;
-    const valid = sameProject && ((selection?.kind === "file" && inventoryFiles(next).some(f => f.id === selection.id)) || (selection?.kind === "group" && next.groups.some(g => g.id === selection.id)) || (selection?.kind === "edge" && next.edges.some(e => e.id === selection.id)));
-    setSelection(valid ? selection : s);
-    setExpanded(new Set(selectionInfo(next, s).files.flatMap(parents)));
-    setAllTree(false);
-    setNotice("");
-    setQuery("");
+    setData(next); setInspector(null); setUmlSourceEntry(null); setOverviewOpen(false);
+    setNotice(""); setQuery("");
   }
   useEffect(() => {
     requestProject()
@@ -407,9 +331,22 @@ export function App() {
     document.addEventListener("pointerdown", handle);
     return () => document.removeEventListener("pointerdown", handle);
   }, [searchOpen]);
+  useEffect(() => {
+    if (!overviewOpen) return;
+    function close(e) {
+      if (e.type === 'keydown' && e.key !== 'Escape') return;
+      if (e.type === 'pointerdown' && e.target.closest('.uml-overview-popover,[aria-label="项目概览"]')) return;
+      if (e.type === 'keydown') { e.preventDefault(); e.stopImmediatePropagation(); }
+      setOverviewOpen(false);
+    }
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', close, true);
+    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close, true); };
+  }, [overviewOpen]);
   function openInspection(view) {
+    setOverviewOpen(false);
     if (["metrics", "coverage"].includes(view.kind)) setModal(view);
-    else setInspector(view);
+    else { setInspector(view); setModal({kind:"inventory",view}); setOverviewOpen(false); }
   }
   function inspectSource(ref) {
     const file = data.files.find((f) => f.id === ref.path);
@@ -431,34 +368,10 @@ export function App() {
       });
     else setNotice("该文件未保留可预览源码；盘点与计数不受影响。");
   }
-  function select(next, fromSearch = false) {
-    setInspector(null);
-    setSelection(next);
-    const files = selectionInfo(data, next).files;
-    if (!allTree && (next.kind !== "file" || fromSearch))
-      setExpanded(new Set(files.flatMap(parents)));
-    if (fromSearch) {
-      setExpanded((old) => new Set([...old, ...files.flatMap(parents)]));
-      setQuery("");
-      setSearchOpen(false);
-      searchRef.current?.blur();
-    }
-  }
-  useEffect(() => {
-    if (selection?.kind === "file")
-      panelRef.current
-        ?.querySelector(`[data-tree-id="${CSS.escape(selection.id)}"]`)
-        ?.scrollIntoView({ block: "nearest" });
-  }, [selection, expanded]);
-  function toggleTree() {
-    setExpanded(
-      new Set(
-        (allTree ? info.files : inventoryFiles(data).map((f) => f.id)).flatMap(
-          parents,
-        ),
-      ),
-    );
-    setAllTree(!allTree);
+  function select(next) {
+    const path = next.kind === "file" ? next.id : data.groups.find(g=>g.id===next.id)?.files[0];
+    if (path) setUmlSourceEntry({path,serial:++entrySerial.current});
+    setQuery(""); setSearchOpen(false); searchRef.current?.blur();
   }
   async function refresh() {
     if (!data.project.root) return;
@@ -476,20 +389,8 @@ export function App() {
       setBusy(false);
     }
   }
-  function switchWorkspace(next) {
-    setWorkspace(next);
-    if (next === "reading") { setExploreOpened(true); chatDrawer.setOpen(true); }
-    requestAnimationFrame(() => {
-      [...document.querySelectorAll('.workspace-switcher button[aria-pressed="true"]')]
-        .find(button => button.getClientRects().length)?.focus({ preventScroll: true });
-    });
-  }
-  const workspaceNavigation = <nav className="workspace-switcher" aria-label="阅读工作区">
-    <button aria-pressed={!exploreActive} onClick={() => switchWorkspace("map")}>代码地图</button>
-    <button aria-pressed={exploreActive} aria-label="功能解读，AI 辅助" disabled={!data.project.root} onClick={() => switchWorkspace("reading")}>功能解读<span className="workspace-ai-badge" aria-hidden="true">AI</span></button>
-  </nav>;
   return (
-    <div className={`app-shell ${exploreOpened && chatDrawer.open && !chatDrawer.overlay ? "has-chat-drawer" : ""}`} style={{"--chat-drawer-width": `${chatDrawer.width}px`}}>
+    <div className={`app-shell uml-shell ${chatDrawer.open && !chatDrawer.overlay ? "has-chat-drawer" : ""}`} style={{"--chat-drawer-width": `${chatDrawer.width}px`}}>
       <header className="topbar">
         <div className="brand">
           <span className="brand-icon">
@@ -590,145 +491,17 @@ export function App() {
             <FolderOpen size={15} />
             打开项目
           </button>
-          <button className="text-button topbar-chat-toggle" data-chat-opener aria-label={exploreOpened && chatDrawer.open ? "收起会话" : "展开会话"} aria-expanded={exploreOpened && chatDrawer.open} onClick={() => { setExploreOpened(true); chatDrawer.setOpen(!chatDrawer.open); }}>{exploreOpened && chatDrawer.open ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}会话</button>
+          <button className="text-button topbar-chat-toggle" data-chat-opener aria-label={chatDrawer.open ? "收起会话" : "展开会话"} aria-expanded={chatDrawer.open} onClick={() => { chatDrawer.setOpen(!chatDrawer.open); }}>{chatDrawer.open ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}会话</button>
+          <button className="icon-button" aria-label="项目概览" title="项目概览" aria-expanded={overviewOpen} onClick={()=>setOverviewOpen(v=>!v)}><Layers size={17}/></button>
           <button className="icon-button" aria-label="打开设置" title="设置" onClick={() => setModal({ kind: "settings" })}>
             <Settings size={17} />
           </button>
         </div>
       </header>
-      <ProjectOverview
-        data={data}
-        inspector={inspector}
-        onOpen={openInspection}
-      />
-      <main className={`board-layout has-left-panel ${!architectureSplit.bounds.enabled ? "is-sidebar-overlay" : ""} ${exploreActive ? "is-reading" : ""}`} ref={architectureSplit.ref} style={{...architectureSplit.style,...(!sidebarOpen || !architectureSplit.bounds.enabled ? {gridTemplateColumns:"36px minmax(0,1fr)"} : {}),...(codeActive && !exploreActive ? {display:"none"}:{})}}>
-        <CodeSidebar id="project-code-sidebar" open={sidebarOpen} onToggle={toggleSidebar} overlay={!architectureSplit.bounds.enabled} panelRef={panelRef} hint={data.project.sample ? "交互示例。打开本地项目后查看实际源码结构。" : undefined} actions={!inspector && <button className="text-button" onClick={toggleTree}>{allTree ? "关联路径" : "完整树"}</button>}>
-          {inspector && (
-            <InspectionPanel
-              data={data}
-              view={inspector}
-              onBack={() => setInspector(null)}
-              onOpen={openInspection}
-              onSource={inspectSource}
-            />
-          )}
-          <div
-            className="code-tree-content"
-            style={{ display: inspector ? "none" : "flex" }}
-          >
-            <Tree
-              data={data}
-              expanded={expanded}
-              setExpanded={setExpanded}
-              linked={linked}
-              focusId={focusId}
-              onFile={(id) => select({ kind: "file", id })}
-            />
-            {selection?.kind === "group" && (
-              <><ModuleStatistics group={info.groups[0]}/><div className="map-context-action"><button className="text-button" disabled={!data.project.root} onClick={() => explainCode(selection)}>解读这段代码</button></div></>
-            )}
-            {selection?.kind === "edge" && (
-              <section className="selection-details" aria-live="polite">
-                <div className="detail-heading">
-                  <strong>代码引用</strong>
-                  <span className="muted">{info.evidence.length} 处</span>
-                </div>
-                <div className="evidence-list">
-                  {info.evidence.map((r, i) => (
-                    <button
-                      key={`${r.from}:${r.line}:${i}`}
-                      className="evidence-row"
-                      onClick={() =>
-                        setModal({ kind: "source", id: r.from, line: r.line })
-                      }
-                    >
-                      <FileCode2 size={14} />
-                      <span>
-                        <strong>
-                          {r.from.split("/").at(-1)}:{r.line}
-                        </strong>
-                        <small title={r.to}>
-                          引用 {r.to.split("/").at(-1)}
-                        </small>
-                      </span>
-                      <ArrowUpRight size={14} />
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-            {selection?.kind === "file" && (
-              <footer className="code-source-action">
-                <button className="text-button" disabled={!data.project.root} onClick={() => explainCode(selection)}>解读这段代码</button>
-                {!info.groups.length && (
-                  <span className="muted">架构图中暂无对应模块</span>
-                )}
-                <button className="text-button" disabled={!data.project.root} onClick={() => browseCode()}>浏览文件关系 <ChevronRight size={14}/></button>
-                <button
-                  className="text-button"
-                  disabled={!activeFile}
-                  onClick={() =>
-                    activeFile &&
-                    setModal({ kind: "source", id: activeFile.id })
-                  }
-                >
-                  {activeFile ? "打开源码" : "未提供源码预览"}
-                  <ArrowUpRight size={14} />
-                </button>
-              </footer>
-            )}
-          </div>
-        </CodeSidebar>
-        <section className="architecture-panel" style={exploreActive ? {display:"none"} : undefined}>
-          <ReactFlowProvider>
-            <ArchitectureGraph
-              data={data}
-              selection={selection}
-              info={info}
-              onSelect={select}
-              onEnter={browseCode}
-              navigation={workspaceNavigation}
-              heading={<div className="section-title">
-              <div className="architecture-entry"><h2>模块依赖</h2><button className="text-button browse-code-button" disabled={!data.project.root} title={data.project.root ? "浏览所选分组或文件" : "打开本地项目后浏览代码"} onClick={() => browseCode()}>浏览文件 <ChevronRight size={14}/></button></div>
-              </div>}
-              actions={<>
-              {!data.coverage && data.diagnostics.length > 0 && (
-                <button
-                  className="text-button diagnostics-button"
-                  onClick={() => setModal({ kind: "diagnostics" })}
-                >
-                  <Info size={14} />
-                  {data.diagnostics.length} 项扫描说明
-                </button>
-              )}
-              {data.project.root && (
-                <button
-                  className="icon-button"
-                  aria-label="重新扫描项目"
-                  title="重新扫描项目"
-                  onClick={refresh}
-                  disabled={busy}
-                >
-                  <RefreshCw size={15} className={busy ? "spin" : ""} />
-                </button>
-              )}
-              </>}
-            />
-          </ReactFlowProvider>
-          <footer className="graph-footer">
-            <span>
-              <span className="legend-line" />
-              静态代码引用
-            </span>
-            <span>{data.groups.length} 个分组</span>
-          </footer>
-        </section>
-        {exploreOpened && <ExplorationWorkspace navigation={workspaceNavigation} data={data} entry={readingEntry} active={exploreActive} drawer={chatDrawer} SourceDialog={SourceDialog} onLocate={locateCode} onSettings={() => setModal({kind: "settings"})}/>}
+      {overviewOpen && <section className="uml-overview-popover" role="dialog" aria-label="项目概览"><header><strong>项目概览</strong><button className="icon-button" aria-label="关闭项目概览" onClick={()=>setOverviewOpen(false)}><X size={16}/></button></header><ProjectOverview data={data} inspector={inspector} onOpen={openInspection}/><div className="uml-overview-links"><button className="text-button" onClick={()=>openInspection({kind:"technologies"})}>全部技术栈与依据</button><button className="text-button" onClick={()=>openInspection({kind:"coverage"})}>解析范围</button><button className="text-button" onClick={()=>setModal({kind:"diagnostics"})}>扫描说明</button><button className="text-button" disabled={busy} onClick={refresh}>重新扫描项目</button></div></section>}
+      <UmlWorkspace data={data} drawer={chatDrawer} onRefresh={refresh} busy={busy} sourceEntry={umlSourceEntry} renderChat={props=><ExplorationWorkspace {...props} data={data} active={true} drawer={chatDrawer} SourceDialog={SourceDialog} onSettings={()=>setModal({kind:"settings"})}/>}/>
 
-        {sidebarOpen && architectureSplit.bounds.enabled && <PanelResize split={architectureSplit}/>}
-      </main>
-      {codeEntry && <CodeBrowser navigation={workspaceNavigation} data={data} entry={codeEntry} active={codeActive && !exploreActive} sidebarOpen={sidebarOpen} onToggleSidebar={toggleSidebar} onExplain={explainCode} onArchitecture={() => setCodeActive(false)}/>}
-      {notice && <div className="app-status" role="status" style={codeActive || exploreActive ? {display:"none"} : undefined}>
+      {notice && <div className="app-status" role="status">
         <Info size={13} />
         {notice}
       </div>}
@@ -740,6 +513,7 @@ export function App() {
         />
       )}
       {modal?.kind === "settings" && <AgentSettings Dialog={Dialog} onClose={() => setModal(null)} />}
+      {modal?.kind === "inventory" && <Dialog title="技术栈与扫描依据" onClose={()=>setModal(null)} wide><InspectionPanel data={data} view={modal.view} onOpen={openInspection} onSource={inspectSource} showHeader={true}/></Dialog>}
       {statisticsView && (
         <Dialog
           title="工程统计"
