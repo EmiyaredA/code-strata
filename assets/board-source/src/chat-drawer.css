@@ -9,8 +9,9 @@
 .chat-drawer.explore-chat{position:fixed;inset-block:0;height:100dvh;max-height:100dvh;min-width:0;z-index:45;border-left:1px solid #dce4ef;box-shadow:-8px 0 30px #233b6909;background:#fff;transition:right .22s ease,visibility .22s;overscroll-behavior:contain}
 .chat-drawer.is-closed{visibility:hidden;pointer-events:none;box-shadow:none}
 .chat-drawer>header{padding:0 18px;height:48px;min-height:48px;gap:10px}
-.chat-drawer>header strong{font-size:16px;line-height:22px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chat-drawer>header small{font-size:12px;line-height:18px}
+.chat-drawer>header>div{gap:1px}
+.chat-drawer>header strong{font-size:16px;line-height:20px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-drawer>header small{font-size:12px;line-height:14px}
 .chat-drawer>header .icon-button{width:32px;height:32px;flex:none}
 .chat-drawer .drawer-new{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:12px;padding:7px 10px;border:1px solid #dfe7f3;border-radius:6px;color:#4266e8;background:white;cursor:pointer}
 .chat-drawer .drawer-topic{display:flex;align-items:center;gap:12px;min-height:56px;padding:12px 24px;border-bottom:1px solid #edf1f7;flex:none}
