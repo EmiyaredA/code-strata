@@ -59,3 +59,6 @@
 .explore-table-scroll tbody tr:last-child td{border-bottom:0}
 .explore-table-scroll tbody tr:hover{background:#fafcff}
 .explore-table-scroll .explore-source-link{text-align:inherit;white-space:normal}
+.explore-edge-label{position:absolute;pointer-events:all;border:1px solid #e4eaf2;border-radius:4px;background:#fff;padding:2px 4px;font:11px/1.4 system-ui;white-space:nowrap;cursor:pointer}
+.explore-edge-label:focus-visible{outline:2px solid #4169ff;outline-offset:2px}
+.reading-flow .react-flow__edgelabel-renderer{z-index:2}

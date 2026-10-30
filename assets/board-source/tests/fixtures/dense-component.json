@@ -1,0 +1,1273 @@
+{
+  "type": "component",
+  "nodes": [
+    {
+      "id": "scripts",
+      "label": "根目录启动脚本",
+      "role": "component",
+      "members": [
+        "dev / dev:backend / start:backend",
+        "dev:web",
+        "dev:desktop"
+      ],
+      "evidence": [
+        {
+          "id": "source:f718b25aa860d5343dc3eaab7fe68d9d",
+          "path": "package.json",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 65
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "label": "Web / React",
+      "role": "package",
+      "members": [],
+      "evidence": [
+        {
+          "id": "source:0a5a0bd7ba4452526c6d3206f9ad61f1",
+          "path": "web/package.json",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 110
+        },
+        {
+          "id": "source:6c4e9ef85291373ff7ab502b41509faa",
+          "path": "web/index.html",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 25
+        }
+      ]
+    },
+    {
+      "id": "html",
+      "label": "web/index.html",
+      "role": "component",
+      "members": [],
+      "parentId": "web",
+      "evidence": [
+        {
+          "id": "source:6c4e9ef85291373ff7ab502b41509faa",
+          "path": "web/index.html",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 25
+        }
+      ]
+    },
+    {
+      "id": "bootstrap",
+      "label": "bootstrap.ts",
+      "role": "component",
+      "members": [],
+      "parentId": "web",
+      "evidence": [
+        {
+          "id": "source:a19a4ed7f2603bec5353b5e3fd758eff",
+          "path": "web/src/app/bootstrap.ts",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 31
+        }
+      ]
+    },
+    {
+      "id": "react",
+      "label": "main.tsx / React 根装配",
+      "role": "component",
+      "members": [
+        "QueryClientProvider",
+        "PageErrorBoundary",
+        "DesktopDevelopmentHost"
+      ],
+      "parentId": "web",
+      "evidence": [
+        {
+          "id": "source:1af42e0c3656d1a57b594ef6893dbe74",
+          "path": "web/src/app/main.tsx",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 37
+        }
+      ]
+    },
+    {
+      "id": "gates",
+      "label": "桌面设置与认证门控",
+      "role": "component",
+      "members": [
+        "DesktopSetupGate",
+        "StudioAuthGate"
+      ],
+      "parentId": "web",
+      "evidence": [
+        {
+          "id": "file:3b905561a8be156c8a95",
+          "path": "web/src/features/accounts/DesktopSetupGate.tsx",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 213
+        },
+        {
+          "id": "file:6dc8e1815c6a8b09df32",
+          "path": "web/src/app/StudioAuthGate.tsx",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 389
+        },
+        {
+          "id": "source:1af42e0c3656d1a57b594ef6893dbe74",
+          "path": "web/src/app/main.tsx",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 37
+        }
+      ]
+    },
+    {
+      "id": "App",
+      "label": "App.tsx / 页面与导航",
+      "role": "component",
+      "members": [],
+      "parentId": "web",
+      "evidence": [
+        {
+          "id": "file:ce0b0c11508308a6cd0e",
+          "path": "web/src/app/App.tsx",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 971
+        },
+        {
+          "id": "source:2ea0ff81ef81d8ef8e129c13d9779d03",
+          "path": "web/src/app/App.tsx",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 300
+        }
+      ]
+    },
+    {
+      "id": "desktop",
+      "label": "Electron 桌面端",
+      "role": "package",
+      "members": [],
+      "evidence": [
+        {
+          "id": "source:398270934fa740db5e7a5fc33c4523f9",
+          "path": "desktop/package.json",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 27
+        },
+        {
+          "id": "source:d9adad47b645bd6e7f9ea60aafdfe200",
+          "path": "desktop/tsconfig.json",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 15
+        }
+      ]
+    },
+    {
+      "id": "desktopReady",
+      "label": "main.ts / whenReady 回调",
+      "role": "component",
+      "members": [],
+      "parentId": "desktop",
+      "evidence": [
+        {
+          "id": "lambda:f6f248cf6aeaa00e75b7",
+          "path": "desktop/src/main.ts",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 656,
+          "endLine": 992,
+          "symbol": {
+            "id": "lambda:f6f248cf6aeaa00e75b7",
+            "name": "<匿名函数 L656>",
+            "kind": "lambda"
+          }
+        },
+        {
+          "id": "source:7256e76fe8ac0c2f9440a96b75fe64e6",
+          "path": "desktop/src/main.ts",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 500,
+          "endLine": 710
+        },
+        {
+          "id": "source:08e1954dcc398d545d48fa22f20ea2cb",
+          "path": "desktop/src/main.ts",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 710,
+          "endLine": 994
+        }
+      ]
+    },
+    {
+      "id": "window",
+      "label": "makeWindow()",
+      "role": "component",
+      "members": [],
+      "parentId": "desktop",
+      "evidence": [
+        {
+          "id": "function:22b39777f88da448c71d",
+          "path": "desktop/src/main.ts",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 456,
+          "endLine": 549,
+          "symbol": {
+            "id": "function:22b39777f88da448c71d",
+            "name": "makeWindow",
+            "kind": "function"
+          }
+        }
+      ]
+    },
+    {
+      "id": "desktopStart",
+      "label": "start(navigate = true)",
+      "role": "component",
+      "members": [],
+      "parentId": "desktop",
+      "evidence": [
+        {
+          "id": "function:ff70d11a0263d836bd40",
+          "path": "desktop/src/main.ts",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 567,
+          "endLine": 623,
+          "symbol": {
+            "id": "function:ff70d11a0263d836bd40",
+            "name": "start",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "source:7256e76fe8ac0c2f9440a96b75fe64e6",
+          "path": "desktop/src/main.ts",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 500,
+          "endLine": 710
+        }
+      ]
+    },
+    {
+      "id": "Backend",
+      "label": "Backend 构造与启动",
+      "role": "component",
+      "members": [
+        "constructor(...) — 已解析",
+        "start() — 候选调用目标"
+      ],
+      "parentId": "desktop",
+      "evidence": [
+        {
+          "id": "constructor:6b55aaf65d1ccb7cb784",
+          "path": "desktop/src/backend.ts",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 14,
+          "endLine": 20,
+          "symbol": {
+            "id": "constructor:6b55aaf65d1ccb7cb784",
+            "name": "constructor",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "method:392394dcea2055baa018",
+          "path": "desktop/src/backend.ts",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 22,
+          "endLine": 128,
+          "symbol": {
+            "id": "method:392394dcea2055baa018",
+            "name": "start",
+            "kind": "method"
+          }
+        },
+        {
+          "id": "source:95ebc4866ec4397ceb5c221d7b18588d",
+          "path": "desktop/src/backend.ts",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 179
+        }
+      ]
+    },
+    {
+      "id": "Agent",
+      "label": "AgentGateway.start()［候选］",
+      "role": "component",
+      "members": [],
+      "parentId": "desktop",
+      "evidence": [
+        {
+          "id": "method:5726c9a3fa52c6e44d15",
+          "path": "desktop/src/agent.ts",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 71,
+          "endLine": 159,
+          "symbol": {
+            "id": "method:5726c9a3fa52c6e44d15",
+            "name": "start",
+            "kind": "method"
+          }
+        }
+      ]
+    },
+    {
+      "id": "launch",
+      "label": "desktop/backend/entry.py / launch",
+      "role": "component",
+      "members": [
+        "prepare_configuration / configure_desktop",
+        "attach_desktop",
+        "Uvicorn 配置与服务调用点"
+      ],
+      "parentId": "desktop",
+      "evidence": [
+        {
+          "id": "function:fded9910abfa5f5cf4e3",
+          "path": "desktop/backend/entry.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 51,
+          "endLine": 126,
+          "symbol": {
+            "id": "function:fded9910abfa5f5cf4e3",
+            "name": "launch",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "source:d09e39e49b2d7ad006a36c245efe1a98",
+          "path": "desktop/backend/entry.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 145
+        }
+      ]
+    },
+    {
+      "id": "backend",
+      "label": "FastAPI 后端",
+      "role": "package",
+      "members": [],
+      "evidence": [
+        {
+          "id": "source:447ac9b24b99d298c26a753172a27f0e",
+          "path": "backend/app/main.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 162
+        }
+      ]
+    },
+    {
+      "id": "apiApp",
+      "label": "main.py / app",
+      "role": "component",
+      "members": [
+        "app = FastAPI(lifespan=lifespan)",
+        "GET /health",
+        "GET /ready"
+      ],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "file:f57cbb0a1d6ed9a2d395",
+          "path": "backend/app/main.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 161
+        },
+        {
+          "id": "source:447ac9b24b99d298c26a753172a27f0e",
+          "path": "backend/app/main.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 162
+        }
+      ]
+    },
+    {
+      "id": "apiRouter",
+      "label": "api.py / api_router（/v1）",
+      "role": "component",
+      "members": [],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "file:d2b235b2bed2402cd86d",
+          "path": "backend/app/api.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 184
+        },
+        {
+          "id": "source:62e114ef6c4bf8a49aaea621c9f81945",
+          "path": "backend/app/api.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 185
+        }
+      ]
+    },
+    {
+      "id": "lifespan",
+      "label": "lifespan() / 生命周期",
+      "role": "component",
+      "members": [],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "function:90ada248944369b7e465",
+          "path": "backend/app/main.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 71,
+          "endLine": 121,
+          "symbol": {
+            "id": "function:90ada248944369b7e465",
+            "name": "lifespan",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "source:447ac9b24b99d298c26a753172a27f0e",
+          "path": "backend/app/main.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 162
+        }
+      ]
+    },
+    {
+      "id": "cleanup",
+      "label": "清理临时目录",
+      "role": "component",
+      "members": [
+        "cleanup_snapshot_staging",
+        "cleanup_library_folder_archive_staging"
+      ],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "function:a1143db95ed3c357a437",
+          "path": "backend/app/capabilities/asset_store/project_snapshots.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 84,
+          "endLine": 86,
+          "symbol": {
+            "id": "function:a1143db95ed3c357a437",
+            "name": "cleanup_snapshot_staging",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "function:d12a41171c6403568c16",
+          "path": "backend/app/console/file_library/library_folder_archive.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 64,
+          "endLine": 65,
+          "symbol": {
+            "id": "function:d12a41171c6403568c16",
+            "name": "cleanup_library_folder_archive_staging",
+            "kind": "function"
+          }
+        }
+      ]
+    },
+    {
+      "id": "migrations",
+      "label": "apply_migrations()",
+      "role": "component",
+      "members": [],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "function:fb52db78285cadbd5d37",
+          "path": "db/migrations/runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 99,
+          "endLine": 127,
+          "symbol": {
+            "id": "function:fb52db78285cadbd5d37",
+            "name": "apply_migrations",
+            "kind": "function"
+          }
+        }
+      ]
+    },
+    {
+      "id": "reconcile",
+      "label": "资料与存储协调、目录种子",
+      "role": "component",
+      "members": [
+        "reconcile_profile_avatars",
+        "reconcile_project_trash / reconcile_snapshot_imports",
+        "seed_sayflow_text_catalog"
+      ],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "function:74adbddb0e74f61fc4e2",
+          "path": "backend/app/capabilities/asset_store/layout_migration.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 40,
+          "endLine": 77,
+          "symbol": {
+            "id": "function:74adbddb0e74f61fc4e2",
+            "name": "reconcile_project_trash",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "function:8d894b12d8f1cf18cd26",
+          "path": "backend/app/capabilities/asset_store/layout_migration.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 80,
+          "endLine": 105,
+          "symbol": {
+            "id": "function:8d894b12d8f1cf18cd26",
+            "name": "reconcile_snapshot_imports",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "function:1390dad14dac30f8186c",
+          "path": "backend/app/console/governance/profile.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 234,
+          "endLine": 240,
+          "symbol": {
+            "id": "function:1390dad14dac30f8186c",
+            "name": "reconcile_profile_avatars",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "function:e943a264a7e8b4241205",
+          "path": "backend/app/llm/catalog/seed.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 364,
+          "endLine": 368,
+          "symbol": {
+            "id": "function:e943a264a7e8b4241205",
+            "name": "seed_sayflow_text_catalog",
+            "kind": "function"
+          }
+        }
+      ]
+    },
+    {
+      "id": "recover",
+      "label": "恢复配额与中断任务",
+      "role": "component",
+      "members": [
+        "recover_admissions",
+        "recover_interrupted_visual_assistant_runs",
+        "recover_interrupted_model_test_runs",
+        "recover_interrupted_amadeus_runs"
+      ],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "function:e2a7380e50bb28c76837",
+          "path": "backend/app/apps/visual_workshop/assistant/actions.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 174,
+          "endLine": 208,
+          "symbol": {
+            "id": "function:e2a7380e50bb28c76837",
+            "name": "recover_interrupted_visual_assistant_runs",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "function:0f863c6e8d6cf2bed1ec",
+          "path": "backend/app/console/amadeus/runs.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 386,
+          "endLine": 437,
+          "symbol": {
+            "id": "function:0f863c6e8d6cf2bed1ec",
+            "name": "recover_interrupted_amadeus_runs",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "function:2e87f792b91e6f358f51",
+          "path": "backend/app/console/governance/runtime_quotas.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 174,
+          "endLine": 183,
+          "symbol": {
+            "id": "function:2e87f792b91e6f358f51",
+            "name": "recover_admissions",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "function:1196e8d9bcef0c95796e",
+          "path": "backend/app/llm/playground/tool_stream.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 43,
+          "endLine": 72,
+          "symbol": {
+            "id": "function:1196e8d9bcef0c95796e",
+            "name": "recover_interrupted_model_test_runs",
+            "kind": "function"
+          }
+        }
+      ]
+    },
+    {
+      "id": "local",
+      "label": "本地模型组件构造",
+      "role": "component",
+      "members": [
+        "Installer",
+        "LocalRuntime",
+        "LocalModels"
+      ],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "constructor:006519e50516d6961c58",
+          "path": "backend/app/llm/local_models/installer.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 64,
+          "endLine": 66,
+          "symbol": {
+            "id": "constructor:006519e50516d6961c58",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:e55a4153f48cb82fb73a",
+          "path": "backend/app/llm/local_models/management.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 19,
+          "endLine": 21,
+          "symbol": {
+            "id": "constructor:e55a4153f48cb82fb73a",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:6ca8b2d9d9f460c2c293",
+          "path": "backend/app/llm/local_models/runtime.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 11,
+          "endLine": 20,
+          "symbol": {
+            "id": "constructor:6ca8b2d9d9f460c2c293",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        }
+      ]
+    },
+    {
+      "id": "localrecover",
+      "label": "local_models.recover()［未解析］",
+      "role": "component",
+      "members": [],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "call:4c249005638e3a0ed8cd",
+          "path": "backend/app/main.py",
+          "association": "callsite",
+          "locationKind": "call",
+          "startLine": 89,
+          "endLine": 89,
+          "symbol": {
+            "id": "function:90ada248944369b7e465",
+            "name": "lifespan",
+            "kind": "function"
+          }
+        }
+      ]
+    },
+    {
+      "id": "supervisor",
+      "label": "RunnerSupervisor 构造",
+      "role": "component",
+      "members": [],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "constructor:ff13cacf556f2dbd11d7",
+          "path": "backend/app/runtime/polling_runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 108,
+          "endLine": 109,
+          "symbol": {
+            "id": "constructor:ff13cacf556f2dbd11d7",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "source:6356e2aba01e4e2cb03626f983083525",
+          "path": "backend/app/runtime/polling_runner.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 133
+        },
+        {
+          "id": "source:447ac9b24b99d298c26a753172a27f0e",
+          "path": "backend/app/main.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 162
+        }
+      ]
+    },
+    {
+      "id": "runners",
+      "label": "后台 Runner 构造集合［已解析］",
+      "role": "component",
+      "members": [
+        "Interview / ArticleSync",
+        "VisualGeneration / Acceptance",
+        "ModelTestGeneration / Inference / Transcription",
+        "Galgame ASR / AnnotationImport / VideoExport / Handoff",
+        "VideoEditor（默认、media）/ Motion / Live2D"
+      ],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "constructor:55390633f8f3ac73db2e",
+          "path": "backend/app/apps/galgame_workshop/assets/annotation_import_runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 141,
+          "endLine": 149,
+          "symbol": {
+            "id": "constructor:55390633f8f3ac73db2e",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:7a5a06073973b5f7fae6",
+          "path": "backend/app/apps/galgame_workshop/assets/asr.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 381,
+          "endLine": 391,
+          "symbol": {
+            "id": "constructor:7a5a06073973b5f7fae6",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:50582012d4bb924fa4a8",
+          "path": "backend/app/apps/galgame_workshop/video/video_export_runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 82,
+          "endLine": 90,
+          "symbol": {
+            "id": "constructor:50582012d4bb924fa4a8",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:5be7814e271ae12ef098",
+          "path": "backend/app/apps/galgame_workshop/video/video_handoff_runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 43,
+          "endLine": 51,
+          "symbol": {
+            "id": "constructor:5be7814e271ae12ef098",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:14f47d0f166eb7b831af",
+          "path": "backend/app/apps/interview_assistant/runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 24,
+          "endLine": 28,
+          "symbol": {
+            "id": "constructor:14f47d0f166eb7b831af",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:3a6a180d414db8f2aa3d",
+          "path": "backend/app/apps/live2d_workshop/runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 25,
+          "endLine": 27,
+          "symbol": {
+            "id": "constructor:3a6a180d414db8f2aa3d",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:60c7953829c6684ab26f",
+          "path": "backend/app/apps/motion_compositor/runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 31,
+          "endLine": 39,
+          "symbol": {
+            "id": "constructor:60c7953829c6684ab26f",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:3d81991bc13fd6f94813",
+          "path": "backend/app/apps/thought_workshop/external_sync/runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 33,
+          "endLine": 35,
+          "symbol": {
+            "id": "constructor:3d81991bc13fd6f94813",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:52115badd7ad8eae6169",
+          "path": "backend/app/apps/video_editor/runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 206,
+          "endLine": 218,
+          "symbol": {
+            "id": "constructor:52115badd7ad8eae6169",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:4a4525d8ed9f92137cc1",
+          "path": "backend/app/apps/visual_workshop/acceptance/runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 152,
+          "endLine": 167,
+          "symbol": {
+            "id": "constructor:4a4525d8ed9f92137cc1",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:7b84a3423ca83f572810",
+          "path": "backend/app/apps/visual_workshop/generation_runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 59,
+          "endLine": 92,
+          "symbol": {
+            "id": "constructor:7b84a3423ca83f572810",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:cfee4b67e692d14d1958",
+          "path": "backend/app/llm/inference/runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 59,
+          "endLine": 76,
+          "symbol": {
+            "id": "constructor:cfee4b67e692d14d1958",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:7c816e937b47ee1d444a",
+          "path": "backend/app/llm/playground/generation_runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 56,
+          "endLine": 85,
+          "symbol": {
+            "id": "constructor:7c816e937b47ee1d444a",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        },
+        {
+          "id": "constructor:adf056656aa070f69a9a",
+          "path": "backend/app/llm/playground/transcription_runner.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 35,
+          "endLine": 44,
+          "symbol": {
+            "id": "constructor:adf056656aa070f69a9a",
+            "name": "__init__",
+            "kind": "constructor"
+          }
+        }
+      ]
+    },
+    {
+      "id": "template",
+      "label": "ModelTemplateSyncRunner［候选］",
+      "role": "component",
+      "members": [],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "class:c6621d15f3cd7ce27afb",
+          "path": "backend/app/console/governance/model_template_sync.py",
+          "association": "definition",
+          "locationKind": "definition",
+          "startLine": 152,
+          "endLine": 230
+        }
+      ]
+    },
+    {
+      "id": "superstart",
+      "label": "supervisor.start()［未解析］",
+      "role": "component",
+      "members": [],
+      "parentId": "backend",
+      "evidence": [
+        {
+          "id": "call:71c6883d7dd059df59af",
+          "path": "backend/app/main.py",
+          "association": "callsite",
+          "locationKind": "call",
+          "startLine": 114,
+          "endLine": 114,
+          "symbol": {
+            "id": "function:90ada248944369b7e465",
+            "name": "lifespan",
+            "kind": "function"
+          }
+        },
+        {
+          "id": "source:6356e2aba01e4e2cb03626f983083525",
+          "path": "backend/app/runtime/polling_runner.py",
+          "association": "source",
+          "locationKind": "source",
+          "startLine": 1,
+          "endLine": 133
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "rootApi",
+      "source": "scripts",
+      "target": "apiApp",
+      "role": "dependency",
+      "label": "启动配置：Uvicorn app.main:app",
+      "guard": "",
+      "status": "inferred"
+    },
+    {
+      "id": "rootWeb",
+      "source": "scripts",
+      "target": "web",
+      "role": "dependency",
+      "label": "启动配置：web 工作区 dev",
+      "guard": "",
+      "status": "inferred"
+    },
+    {
+      "id": "rootDesk",
+      "source": "scripts",
+      "target": "desktop",
+      "role": "dependency",
+      "label": "桌面开发命令配置",
+      "guard": "",
+      "status": "inferred"
+    },
+    {
+      "id": "htmlBoot",
+      "source": "html",
+      "target": "bootstrap",
+      "role": "dependency",
+      "label": "HTML module 入口声明",
+      "guard": "",
+      "status": "inferred"
+    },
+    {
+      "id": "bootMain",
+      "source": "bootstrap",
+      "target": "react",
+      "role": "dependency",
+      "label": "动态导入［分析器已解析］",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "reactGates",
+      "source": "react",
+      "target": "gates",
+      "role": "dependency",
+      "label": "导入与 JSX 装配",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "reactApp",
+      "source": "react",
+      "target": "App",
+      "role": "dependency",
+      "label": "导入；门控内部声明 <App />",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "readyWindow",
+      "source": "desktopReady",
+      "target": "window",
+      "role": "dependency",
+      "label": "调用［已解析］",
+      "guard": "持有单实例锁且 app.whenReady() fulfilled",
+      "status": "resolved"
+    },
+    {
+      "id": "readyStart",
+      "source": "desktopReady",
+      "target": "desktopStart",
+      "role": "dependency",
+      "label": "调用［已解析］",
+      "guard": "ready 回调执行到 start()",
+      "status": "resolved"
+    },
+    {
+      "id": "deskBackend",
+      "source": "desktopStart",
+      "target": "Backend",
+      "role": "dependency",
+      "label": "构造［已解析］；start［候选］",
+      "guard": "!starting && !quitting；try 执行到相应语句",
+      "status": "candidate"
+    },
+    {
+      "id": "deskAgent",
+      "source": "desktopStart",
+      "target": "Agent",
+      "role": "dependency",
+      "label": "agent?.start()［候选］",
+      "guard": "agent 存在且 await backend.start() 成功返回",
+      "status": "candidate"
+    },
+    {
+      "id": "backendEntry",
+      "source": "Backend",
+      "target": "launch",
+      "role": "dependency",
+      "label": "子进程入口参数［源码推导］",
+      "guard": "this.packaged === false",
+      "status": "unresolved"
+    },
+    {
+      "id": "launchApp",
+      "source": "launch",
+      "target": "apiApp",
+      "role": "dependency",
+      "label": "导入共享 app［已解析导入］",
+      "guard": "",
+      "status": "inferred"
+    },
+    {
+      "id": "appApi",
+      "source": "apiApp",
+      "target": "apiRouter",
+      "role": "dependency",
+      "label": "导入并注册路由",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "appLife",
+      "source": "apiApp",
+      "target": "lifespan",
+      "role": "dependency",
+      "label": "FastAPI 生命周期注册［源码推导］",
+      "guard": "",
+      "status": "inferred"
+    },
+    {
+      "id": "lifeCleanup",
+      "source": "lifespan",
+      "target": "cleanup",
+      "role": "dependency",
+      "label": "调用［已解析］",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "lifeMigration",
+      "source": "lifespan",
+      "target": "migrations",
+      "role": "dependency",
+      "label": "调用［已解析］",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "lifeReconcile",
+      "source": "lifespan",
+      "target": "reconcile",
+      "role": "dependency",
+      "label": "调用［已解析］",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "lifeRecover",
+      "source": "lifespan",
+      "target": "recover",
+      "role": "dependency",
+      "label": "调用［已解析］",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "lifeLocal",
+      "source": "lifespan",
+      "target": "local",
+      "role": "dependency",
+      "label": "构造［已解析］",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "lifeRunners",
+      "source": "lifespan",
+      "target": "runners",
+      "role": "dependency",
+      "label": "构造［已解析］",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "lifeLocalRecover",
+      "source": "lifespan",
+      "target": "localrecover",
+      "role": "dependency",
+      "label": "调用点［未解析］",
+      "guard": "",
+      "status": "unresolved"
+    },
+    {
+      "id": "lifeSupervisor",
+      "source": "lifespan",
+      "target": "supervisor",
+      "role": "dependency",
+      "label": "构造［已解析］",
+      "guard": "",
+      "status": "resolved"
+    },
+    {
+      "id": "lifeTemplate",
+      "source": "lifespan",
+      "target": "template",
+      "role": "dependency",
+      "label": "构造目标［候选］",
+      "guard": "",
+      "status": "candidate"
+    },
+    {
+      "id": "lifeSuperstart",
+      "source": "lifespan",
+      "target": "superstart",
+      "role": "dependency",
+      "label": "调用点［未解析］",
+      "guard": "",
+      "status": "unresolved"
+    },
+    {
+      "id": "supervisorRunners",
+      "source": "supervisor",
+      "target": "runners",
+      "role": "aggregation",
+      "label": "runners 参数集合［源码推导］",
+      "guard": "",
+      "status": "inferred"
+    },
+    {
+      "id": "supervisorTemplate",
+      "source": "supervisor",
+      "target": "template",
+      "role": "aggregation",
+      "label": "候选实例纳入参数声明［源码推导］",
+      "guard": "",
+      "status": "candidate"
+    }
+  ]
+}

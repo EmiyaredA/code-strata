@@ -1,0 +1,391 @@
+{
+  "labels": [
+    [
+      "rootApi",
+      {
+        "height": 24,
+        "width": 169
+      }
+    ],
+    [
+      "rootWeb",
+      {
+        "height": 24,
+        "width": 137
+      }
+    ],
+    [
+      "rootDesk",
+      {
+        "height": 24,
+        "width": 94
+      }
+    ],
+    [
+      "htmlBoot",
+      {
+        "height": 24,
+        "width": 124
+      }
+    ],
+    [
+      "bootMain",
+      {
+        "height": 24,
+        "width": 134
+      }
+    ],
+    [
+      "reactGates",
+      {
+        "height": 24,
+        "width": 89
+      }
+    ],
+    [
+      "reactApp",
+      {
+        "height": 24,
+        "width": 145
+      }
+    ],
+    [
+      "readyWindow",
+      {
+        "height": 42,
+        "width": 222
+      }
+    ],
+    [
+      "readyStart",
+      {
+        "height": 24,
+        "width": 208
+      }
+    ],
+    [
+      "deskBackend",
+      {
+        "height": 42,
+        "width": 222
+      }
+    ],
+    [
+      "deskAgent",
+      {
+        "height": 42,
+        "width": 222
+      }
+    ],
+    [
+      "backendEntry",
+      {
+        "height": 42,
+        "width": 222
+      }
+    ],
+    [
+      "launchApp",
+      {
+        "height": 24,
+        "width": 145
+      }
+    ],
+    [
+      "appApi",
+      {
+        "height": 24,
+        "width": 84
+      }
+    ],
+    [
+      "appLife",
+      {
+        "height": 24,
+        "width": 173
+      }
+    ],
+    [
+      "lifeCleanup",
+      {
+        "height": 24,
+        "width": 84
+      }
+    ],
+    [
+      "lifeMigration",
+      {
+        "height": 24,
+        "width": 84
+      }
+    ],
+    [
+      "lifeReconcile",
+      {
+        "height": 24,
+        "width": 84
+      }
+    ],
+    [
+      "lifeRecover",
+      {
+        "height": 24,
+        "width": 84
+      }
+    ],
+    [
+      "lifeLocal",
+      {
+        "height": 24,
+        "width": 84
+      }
+    ],
+    [
+      "lifeRunners",
+      {
+        "height": 24,
+        "width": 84
+      }
+    ],
+    [
+      "lifeLocalRecover",
+      {
+        "height": 24,
+        "width": 94
+      }
+    ],
+    [
+      "lifeSupervisor",
+      {
+        "height": 24,
+        "width": 84
+      }
+    ],
+    [
+      "lifeTemplate",
+      {
+        "height": 24,
+        "width": 94
+      }
+    ],
+    [
+      "lifeSuperstart",
+      {
+        "height": 24,
+        "width": 94
+      }
+    ],
+    [
+      "supervisorRunners",
+      {
+        "height": 24,
+        "width": 154
+      }
+    ],
+    [
+      "supervisorTemplate",
+      {
+        "height": 24,
+        "width": 174
+      }
+    ]
+  ],
+  "nodes": [
+    [
+      "scripts",
+      {
+        "height": 197,
+        "width": 220
+      }
+    ],
+    [
+      "web",
+      {
+        "height": 108,
+        "width": 220
+      }
+    ],
+    [
+      "html",
+      {
+        "height": 92,
+        "width": 220
+      }
+    ],
+    [
+      "bootstrap",
+      {
+        "height": 92,
+        "width": 220
+      }
+    ],
+    [
+      "react",
+      {
+        "height": 175,
+        "width": 220
+      }
+    ],
+    [
+      "gates",
+      {
+        "height": 207,
+        "width": 220
+      }
+    ],
+    [
+      "App",
+      {
+        "height": 92,
+        "width": 220
+      }
+    ],
+    [
+      "desktop",
+      {
+        "height": 108,
+        "width": 220
+      }
+    ],
+    [
+      "desktopReady",
+      {
+        "height": 94,
+        "width": 220
+      }
+    ],
+    [
+      "window",
+      {
+        "height": 94,
+        "width": 220
+      }
+    ],
+    [
+      "desktopStart",
+      {
+        "height": 94,
+        "width": 220
+      }
+    ],
+    [
+      "Backend",
+      {
+        "height": 155,
+        "width": 220
+      }
+    ],
+    [
+      "Agent",
+      {
+        "height": 94,
+        "width": 220
+      }
+    ],
+    [
+      "launch",
+      {
+        "height": 217,
+        "width": 220
+      }
+    ],
+    [
+      "backend",
+      {
+        "height": 77,
+        "width": 220
+      }
+    ],
+    [
+      "apiApp",
+      {
+        "height": 197,
+        "width": 220
+      }
+    ],
+    [
+      "apiRouter",
+      {
+        "height": 92,
+        "width": 220
+      }
+    ],
+    [
+      "lifespan",
+      {
+        "height": 94,
+        "width": 220
+      }
+    ],
+    [
+      "cleanup",
+      {
+        "height": 210,
+        "width": 220
+      }
+    ],
+    [
+      "migrations",
+      {
+        "height": 94,
+        "width": 220
+      }
+    ],
+    [
+      "reconcile",
+      {
+        "height": 279,
+        "width": 220
+      }
+    ],
+    [
+      "recover",
+      {
+        "height": 321,
+        "width": 220
+      }
+    ],
+    [
+      "local",
+      {
+        "height": 233,
+        "width": 220
+      }
+    ],
+    [
+      "localrecover",
+      {
+        "height": 112,
+        "width": 220
+      }
+    ],
+    [
+      "supervisor",
+      {
+        "height": 125,
+        "width": 220
+      }
+    ],
+    [
+      "runners",
+      {
+        "height": 383,
+        "width": 220
+      }
+    ],
+    [
+      "template",
+      {
+        "height": 110,
+        "width": 220
+      }
+    ],
+    [
+      "superstart",
+      {
+        "height": 125,
+        "width": 220
+      }
+    ]
+  ]
+}

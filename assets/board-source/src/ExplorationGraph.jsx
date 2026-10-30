@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { ReactFlow, Background, Controls, ControlButton, Handle, Position, MarkerType, useReactFlow } from "@xyflow/react";
+import { ReactFlow, Background, Controls, ControlButton, Handle, Position, MarkerType, useReactFlow, BaseEdge, EdgeLabelRenderer, getSmoothStepPath, getBezierPath } from "@xyflow/react";
 import { FileCode2, GitBranch, Code2, Maximize } from "lucide-react";
 import { rankedLayout, layoutViewport } from "./relation-layout.js";
 
@@ -19,6 +19,17 @@ function ReadingGroup({ data }) {
   return <div className="explore-group-title"><span>{data.index + 1}</span>{data.title}<small>阅读分组</small></div>;
 }
 const nodeTypes = { reading: ReadingNode, readingGroup: ReadingGroup };
+
+function ReadingEdge(props) {
+  const [path, x, y] = props.source === props.target ? getBezierPath(props) : getSmoothStepPath(props);
+  // Labels share a portal above every SVG edge, so another edge cannot paint over them.
+  return <><BaseEdge id={props.id} path={path} markerEnd={props.markerEnd} style={props.style} interactionWidth={20}/>
+    {props.label && <EdgeLabelRenderer><button className="reader-edge-label explore-edge-label nodrag nopan"
+      style={{transform:`translate(-50%,-50%) translate(${x}px,${y}px)`,color:props.style?.stroke}}
+      aria-label={`${props.label}：查看源码依据`} onClick={event=>{event.stopPropagation();props.data.onSource(props.data.relation);}}>{props.label}</button></EdgeLabelRenderer>}
+  </>;
+}
+const edgeTypes = { reading: ReadingEdge };
 
 function FitReadingGraph({ host, projection }) {
   const flow = useReactFlow();
@@ -62,28 +73,31 @@ export function readingProjection(view) {
 export function ExplorationGraph({ view, onSource }) {
   const host = useRef(null);
   const projection = useMemo(() => readingProjection(view), [view.runId]);
-  const nodes = useMemo(() => projection.map(n => ({ ...n, draggable: false,
+  const nodes = useMemo(() => projection.map(n => ({ ...n, draggable: false, zIndex: n.type === "reading" ? 3 : 0,
     width: n.style.width, height: n.style.height,
     handles: n.type === "reading" ? [
       {id:"in",type:"target",position:Position.Left,x:0,y:n.style.height/2},
       {id:"out",type:"source",position:Position.Right,x:n.style.width,y:n.style.height/2},
     ] : [], data: { ...n.data, onSource } })), [projection, onSource]);
+  const openRelation = useCallback(relation => {
+    const site = relation.sites?.[0];
+    const node = view.nodes.find(n => n.id === relation.target) || view.nodes.find(n => n.id === relation.source);
+    onSource({ kind: "source", path: site?.path || relation.path || node?.path, range: site?.range || relation.range || node?.range });
+  }, [view, onSource]);
   const edges = useMemo(() => view.relations.map(r => {
     const uncertain = r.status === "candidate" || r.status === "unresolved" || r.kind === "unresolved-call";
     const color = uncertain ? "#bd8730" : "#6285c9";
     const label = r.kind === "calls" ? r.status === "candidate" ? "候选调用" : r.source === r.target ? "递归调用" : "静态调用" :
       r.kind === "unresolved-call" ? "目标未解析" : r.kind === "imports" ? "导入" : r.kind === "structure-contains" ? "包含结构" : "源码顺序";
-    return { id: r.id, source: r.source, target: r.target, sourceHandle:"out",targetHandle:"in",type: r.source === r.target ? "default" : "smoothstep", label,
+    return { id: r.id, source: r.source, target: r.target, sourceHandle:"out",targetHandle:"in",type:"reading", zIndex:1, label,
       style: { stroke: color, strokeWidth: 1.7, strokeDasharray: uncertain ? "6 4" : undefined },
-      labelStyle: { fill: color, fontSize: 11 }, labelBgStyle: { fill: "#fff" }, markerEnd: { type: MarkerType.ArrowClosed, color }, data: r };
-  }), [view]);
-  return <div className="reading-flow" ref={host}><ReactFlow key={view.runId} nodes={nodes} edges={edges} nodeTypes={nodeTypes} nodesConnectable={false} nodesDraggable={false}
+      markerEnd: { type: MarkerType.ArrowClosed, color }, data: {relation:r,onSource:openRelation} };
+  }), [view, openRelation]);
+  // Keep group backgrounds (0), edges (1), label portal (2), and cards (3) independent.
+  // Automatic parent-edge elevation would otherwise lift edges above their labels again.
+  return <div className="reading-flow" ref={host}><ReactFlow key={view.runId} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} zIndexMode="manual" nodesConnectable={false} nodesDraggable={false}
     fitView fitViewOptions={{ padding: .18, maxZoom: 1 }} minZoom={.15} maxZoom={1.7} zoomOnDoubleClick={false}
-    onEdgeClick={(_, edge) => {
-      const relation = edge.data, site = relation.sites?.[0];
-      const node = view.nodes.find(n => n.id === relation.target) || view.nodes.find(n => n.id === relation.source);
-      onSource({ kind: "source", path: site?.path || relation.path || node?.path, range: site?.range || relation.range || node?.range });
-    }} proOptions={{ hideAttribution: true }}>
+    onEdgeClick={(_, edge) => openRelation(edge.data.relation)} proOptions={{ hideAttribution: true }}>
     <FitReadingGraph host={host} projection={projection}/><Background color="#d9e2ef" gap={22} size={.8}/>
   </ReactFlow></div>;
 }

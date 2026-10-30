@@ -60,6 +60,23 @@ class SnapshotSourceTests(unittest.TestCase):
         with self.assertRaisesRegex(LookupError, '旧快照.*更新'):
             reader.source(snapshot, 'index.html')
 
+    def test_full_file_can_be_reassembled_from_bounded_historical_chunks(self):
+        text = '\n'.join(f'# immutable line {n}' for n in range(1, 995))
+        path = self.project / 'long.py'
+        path.write_text(text)
+        snapshot, _, _ = self.save()
+        path.unlink()
+        reader = Store(self.store.path)
+        pieces = []
+        for start in (1, 301, 601, 901):
+            block = reader.source(snapshot, 'long.py', start, 100000)
+            self.assertEqual(block['startLine'], start)
+            self.assertLessEqual(block['endLine'] - start + 1, 300)
+            self.assertEqual(block['totalLines'], 994)
+            pieces.append(block['content'])
+        self.assertEqual('\n'.join(pieces), text)
+        self.assertIsNone(block['nextLine'])
+
     def test_parser_budget_does_not_prevent_snapshot_reading(self):
         text = '# large source\n' + ' ' * (512 * 1024)
         (self.project / 'large.py').write_text(text)

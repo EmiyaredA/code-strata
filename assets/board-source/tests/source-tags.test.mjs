@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceGroups, namePrefixes, sameEvidence, locationLabel, mergeSourceFile } from '../src/source-tags.js';
-import { sequenceProjection, umlProjection, elementEvidence } from '../src/uml-model.js';
+import { sourceGroups, namePrefixes, sameEvidence, locationLabel } from '../src/source-tags.js';
+import { sequenceProjection, umlProjection, elementEvidence, normalizeTagMode, nodeSize } from '../src/uml-model.js';
 import { keepStandardVisible } from '../src/standard-viewport.js';
 
 test('standard selection stays visible after opening the source sheet or resizing chat',()=>{
@@ -12,13 +12,6 @@ test('standard selection stays visible after opening the source sheet or resizin
 });
 
 const ref=(name,line,association='source',path='migration.py')=>({id:name+line,path,startLine:line,endLine:line,association,locationKind:association==='target-definition'?'definition':'source',symbol:{id:name,name,kind:'function'}});
-test('a source text response cannot overwrite newer symbol metadata or cross a version',()=>{
-  const requested={snapshotId:'one',diagramId:'d',revision:1,element:{id:'node'},refs:[{path:'a.py'}]};
-  const current={...requested,refs:[ref('publish',31)]};
-  assert.equal(mergeSourceFile(current,requested,{content:'text'}).refs,current.refs);
-  assert.equal(mergeSourceFile(current,{...requested,revision:2},{content:'text'}).revision,2);
-  assert.equal(mergeSourceFile(current,{...requested,snapshotId:'two'},{content:'text'}).refs,requested.refs);
-});
 test('collapsed names preserve real prefixes and grow to distinguish collisions',()=>{
   assert.deepEqual(namePrefixes(['migration.py','publish()']),['mig…','pub…']);
   const names=['parse_args()','parse_body()','publish()','中文函数()'];
@@ -47,15 +40,25 @@ test('relationship own evidence takes priority and endpoint references are marke
   const refs=elementEvidence({nodes:[{id:'a',evidence:[own,endpoint]},{id:'b',evidence:[]}]},edge);
   assert.equal(refs.length,2);assert.equal(refs[0].origin,'element');assert.equal(refs[1].origin,'endpoint');
 });
-test('expanded tags enlarge geometry and move all sequence ports below the common header',()=>{
+test('full tags enlarge geometry and move all sequence ports below the common header',()=>{
   const model={type:'sequence',nodes:[{id:'a',role:'participant',evidence:[ref('convert_legacy',79),ref('publish',31,'target-definition')]},{id:'b',role:'participant'}],edges:[{id:'ab',source:'a',target:'b',order:0}]};
-  const small=sequenceProjection(model),large=sequenceProjection(model,'expanded');
+  const small=sequenceProjection(model),large=sequenceProjection(model,'full');
   assert.ok(large.nodes[0].data.headerHeight>small.nodes[0].data.headerHeight);
   assert.equal(large.nodes[0].data.headerHeight,large.nodes[1].data.headerHeight);
   assert.deepEqual(large.edges,small.edges);assert.equal(large.nodes[0].data.messages[0].id,'ab');
 });
 test('ELK and wrapped routes preserve semantic endpoints across tag modes',async()=>{
   const model={type:'activity',nodes:[{id:'a',role:'action',evidence:[ref('publish',31)]},{id:'b',role:'action',evidence:[ref('convert_legacy',79)]}],edges:[{id:'ab',source:'a',target:'b',role:'flow'}]};
-  const a=await umlProjection(model),b=await umlProjection(model,'expanded');
-  assert.ok(b.nodes[0].height>a.nodes[0].height);assert.deepEqual(a.edges,b.edges);
+  const a=await umlProjection(model),b=await umlProjection(model,'full');
+  assert.ok(b.nodes[0].height>a.nodes[0].height);assert.deepEqual(a.edges.map(({route,...edge})=>edge),b.edges.map(({route,...edge})=>edge));assert.notDeepEqual(a.edges[0].route,b.edges[0].route);
+});
+
+test('project source display preferences migrate to simple and full without changing evidence',()=>{
+  for(const value of [undefined,null,'','folded','simple','unknown'])assert.equal(normalizeTagMode(value),'simple');
+  for(const value of ['expanded','full'])assert.equal(normalizeTagMode(value),'full');
+  const n={role:'component',label:'业务步骤',members:['save()'],evidence:[ref('publish',31)]};
+  assert.deepEqual(nodeSize(n,'component','simple'),nodeSize({...n,evidence:[]},'component','simple'));
+  assert.ok(nodeSize(n,'component','full').height>nodeSize(n,'component','simple').height);
+  assert.equal(n.evidence[0].symbol.name,'publish');
+  const choice={...n,role:'choice'};assert.deepEqual(nodeSize(choice,'state','simple'),nodeSize({...choice,evidence:[]},'state','simple'));
 });

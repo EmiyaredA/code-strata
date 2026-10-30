@@ -22,7 +22,6 @@ import {
 import { demo } from "./demo.js";
 import { searchProject } from "./model.js";
 import {
-  ProjectOverview,
   InspectionPanel,
 } from "./InventoryPanels.jsx";
 import "./workspace-toolbar.css";
@@ -287,8 +286,8 @@ function SourceDialog({ file, line, onClose, onPage, onLocate, locating, locateE
 }
 export function App() {
   const chatDrawer = useChatDrawer();
-  const [data, setData] = useState(demo), [inspector, setInspector] = useState(null);
-  const [overviewOpen, setOverviewOpen] = useState(false), [umlSourceEntry, setUmlSourceEntry] = useState(null);
+  const [data, setData] = useState(demo);
+  const [umlSourceEntry, setUmlSourceEntry] = useState(null);
   const entrySerial = useRef(0);
   const [modal, setModal] = useState(null),
     [query, setQuery] = useState(""),
@@ -300,7 +299,7 @@ export function App() {
   const searchRef = useRef(null);
   const results = useMemo(() => searchProject(data, query), [data, query]);
   function load(next) {
-    setData(next); setInspector(null); setUmlSourceEntry(null); setOverviewOpen(false);
+    setData(next); setUmlSourceEntry(null);
     setNotice(""); setQuery("");
   }
   useEffect(() => {
@@ -331,22 +330,9 @@ export function App() {
     document.addEventListener("pointerdown", handle);
     return () => document.removeEventListener("pointerdown", handle);
   }, [searchOpen]);
-  useEffect(() => {
-    if (!overviewOpen) return;
-    function close(e) {
-      if (e.type === 'keydown' && e.key !== 'Escape') return;
-      if (e.type === 'pointerdown' && e.target.closest('.uml-overview-popover,[aria-label="项目概览"]')) return;
-      if (e.type === 'keydown') { e.preventDefault(); e.stopImmediatePropagation(); }
-      setOverviewOpen(false);
-    }
-    document.addEventListener('pointerdown', close);
-    document.addEventListener('keydown', close, true);
-    return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close, true); };
-  }, [overviewOpen]);
   function openInspection(view) {
-    setOverviewOpen(false);
     if (["metrics", "coverage"].includes(view.kind)) setModal(view);
-    else { setInspector(view); setModal({kind:"inventory",view}); setOverviewOpen(false); }
+    else setModal({kind:"inventory",view});
   }
   function inspectSource(ref) {
     const file = data.files.find((f) => f.id === ref.path);
@@ -492,13 +478,12 @@ export function App() {
             打开项目
           </button>
           <button className="text-button topbar-chat-toggle" data-chat-opener aria-label={chatDrawer.open ? "收起会话" : "展开会话"} aria-expanded={chatDrawer.open} onClick={() => { chatDrawer.setOpen(!chatDrawer.open); }}>{chatDrawer.open ? <PanelRightClose size={16}/> : <PanelRightOpen size={16}/>}会话</button>
-          <button className="icon-button" aria-label="项目概览" title="项目概览" aria-expanded={overviewOpen} onClick={()=>setOverviewOpen(v=>!v)}><Layers size={17}/></button>
+          <button className="icon-button" aria-label="工程统计" title="工程统计" aria-haspopup="dialog" onClick={()=>openInspection({kind:"metrics"})}><Layers size={17}/></button>
           <button className="icon-button" aria-label="打开设置" title="设置" onClick={() => setModal({ kind: "settings" })}>
             <Settings size={17} />
           </button>
         </div>
       </header>
-      {overviewOpen && <section className="uml-overview-popover" role="dialog" aria-label="项目概览"><header><strong>项目概览</strong><button className="icon-button" aria-label="关闭项目概览" onClick={()=>setOverviewOpen(false)}><X size={16}/></button></header><ProjectOverview data={data} inspector={inspector} onOpen={openInspection}/><div className="uml-overview-links"><button className="text-button" onClick={()=>openInspection({kind:"technologies"})}>全部技术栈与依据</button><button className="text-button" onClick={()=>openInspection({kind:"coverage"})}>解析范围</button><button className="text-button" onClick={()=>setModal({kind:"diagnostics"})}>扫描说明</button><button className="text-button" disabled={busy} onClick={refresh}>重新扫描项目</button></div></section>}
       <UmlWorkspace data={data} drawer={chatDrawer} onRefresh={refresh} busy={busy} sourceEntry={umlSourceEntry} renderChat={props=><ExplorationWorkspace {...props} data={data} active={true} drawer={chatDrawer} SourceDialog={SourceDialog} onSettings={()=>setModal({kind:"settings"})}/>}/>
 
       {notice && <div className="app-status" role="status">

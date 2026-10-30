@@ -29,14 +29,9 @@ export function sourceGroups(refs = []) {
   return groups;
 }
 export function locationLabel(ref) {
+  if(ref.navigationOnly)return ref.navigationKind==='citation'?'解释定位':'文件浏览';
   return ref.association === 'target-definition' ? (ref.status==='candidate'?'候选目标定义':'被调用函数定义') : ref.locationKind === 'definition' ? '函数定义' : ref.association === 'callsite' || ref.locationKind === 'call' ? '调用处' : '源码依据';
 }
 export function sameEvidence(a, b) {
   return a?.path === b?.path && a?.startLine === b?.startLine && a?.endLine === b?.endLine && a?.locationKind === b?.locationKind && a?.association === b?.association;
-}
-export function mergeSourceFile(current, requested, file) {
-  // Symbol annotations may finish while a source-page request is in flight.
-  // A page response supplies text, not permission to discard newer metadata.
-  const same=current&&current.snapshotId===requested.snapshotId&&current.diagramId===requested.diagramId&&current.revision===requested.revision&&current.element?.id===requested.element?.id;
-  return {...requested,...(same?current:{}),file};
 }
