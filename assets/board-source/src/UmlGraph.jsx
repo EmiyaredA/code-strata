@@ -1,3 +1,4 @@
+import { nodeTitle, nodeMembers, CONTROL_TYPES } from './notation.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ReactFlow, ReactFlowProvider, Background, Controls, ControlButton, Handle, Position, MarkerType, useReactFlow, BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from '@xyflow/react';
 import { Link2, UserRound, Component, Server, FileCode2, Maximize } from 'lucide-react';
@@ -16,11 +17,13 @@ export function UmlNode({ data, selected, measuring=false }) {
       <Handle id="left-out" type="source" position={Position.Left}/><Handle id="right-in" type="target" position={Position.Right}/>
       <Handle id="left" type="target" position={Position.Left}/><Handle id="right" type="source" position={Position.Right}/></>)}
     {!special && <div className="uml-node-content">
-      {['interface','enum','execution','artifact','component','boundary','control','entity'].includes(n.role) && <small>«{n.role === 'execution' ? 'executionEnvironment' : n.role}»</small>}
-      <strong>{icon}{n.label}</strong>
-      {!!n.members?.length && <div className="uml-members">{n.members.map((m,i)=><code key={i}>{m}</code>)}</div>}
+      {['interface','enum','execution','artifact','component','boundary','control','entity','profile','stereotype','metaclass','structured-class','part','interaction'].includes(n.role) && <small>«{n.role === 'execution' ? 'executionEnvironment' : n.role}»</small>}
+      <strong>{icon}{nodeTitle(n)}</strong>
+      {!!nodeMembers(n).length && <div className="uml-members">{nodeMembers(n).map((m,i)=><code key={i}>{m}</code>)}</div>}
       {showSources&&<SourceTags refs={n.evidence} mode="expanded" limit={2} onChoose={ref=>data.choose(n,ref)}/>}
     </div>}
+    {n.role==='port'&&<span className={'uml-port-symbol port-'+n.portKind} aria-label={n.portKind+' 端口'}/>}
+    {n.role==='signal'&&<small className="uml-time-axis">{data.timeUnit?'时间 / '+data.timeUnit:'逻辑顺序 · 非运行耗时'}</small>}
     {sequence && <div className="uml-lifeline"/>}
   </div>;
 }
@@ -98,7 +101,7 @@ function Canvas({ model, state, onState, onSelect, externalSelection, tagMode='s
   const select = (element,ref) => callbacks.current.onSelect(element,ref);
   const selected = externalSelection || state?.selection;
   // Keep labels paired with their measured layout until the next projection is ready.
-  const nodes = useMemo(()=> (projection?.nodes||[]).map(n=>({...n,selected:selected?.id===n.id,draggable:false, data:{...n.data,choose:select,tagMode:projection.tagMode}})),[projection,selected]);
+  const nodes = useMemo(()=> (projection?.nodes||[]).map(n=>({...n,selected:selected?.id===n.id,draggable:false, data:{...n.data,choose:select,tagMode:projection.tagMode,timeUnit:model.timeUnit}})),[projection,selected]);
   const edges = useMemo(()=> (projection?.edges||[]).map(e=>{
     const uncertain=['candidate','unresolved'].includes(e.status), isSelected=selected?.id===e.id;
     const color=isSelected?'#245cff':uncertain?'#b17b26':'#7894b6';
@@ -106,10 +109,10 @@ function Canvas({ model, state, onState, onSelect, externalSelection, tagMode='s
     return {...e,type:'uml',selected:isSelected,
       ariaLabel:`关系：${model.nodes.find(n=>n.id===e.source)?.label||e.source} → ${model.nodes.find(n=>n.id===e.target)?.label||e.target}`,
       domAttributes:{onKeyDown:event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();select(e);}}},
-      sourceHandle:e.sourceHandle || (['activity','state'].includes(model.type)?'bottom':'right'), targetHandle:e.targetHandle || (['activity','state'].includes(model.type)?'top':'left'),
+      sourceHandle:e.sourceHandle || (CONTROL_TYPES.has(model.type)?'bottom':'right'), targetHandle:e.targetHandle || (CONTROL_TYPES.has(model.type)?'top':'left'),
       data:{...e,sequence:model.type==='sequence',choose:select},
       style:{stroke:color,strokeWidth:isSelected?2.4:1.6,strokeDasharray:uncertain||['return','create','dependency','implementation','include','extend'].includes(e.role)?'6 4':undefined},
-      markerEnd:diamond||['association','communication'].includes(e.role)?undefined:['inheritance','implementation'].includes(e.role)?'uml-generalization':{type:['return','async','create','dependency','include','extend'].includes(e.role)?MarkerType.Arrow:MarkerType.ArrowClosed,color,width:18,height:18},
+      markerEnd:diamond||['association','communication','link','connector','assembly','delegation'].includes(e.role)?undefined:['inheritance','implementation'].includes(e.role)?'uml-generalization':{type:['return','async','create','dependency','include','extend','package-import','package-merge'].includes(e.role)?MarkerType.Arrow:MarkerType.ArrowClosed,color,width:18,height:18},
       markerStart:diamond?`uml-${e.role}`:undefined,
     };
   }),[projection,selected,model.type]);

@@ -11,6 +11,18 @@
 - 各图、各版本分别保存选择和视口；切换 Tab、版本、项目或关闭检查窗会废弃过期源码请求。浏览器偏好使用项目路径作为键，不随会话切换。
 - 顶栏“工程统计”图标直接打开完整统计弹窗，可切换代码规模与解析详情；不再经过项目概览浮层。旧的代码地图／功能解读切换、常驻源码和调用层级不占主工作区。
 
+## 图管理与更新
+
+Tab 栏的“＋”打开新增图表单：填写想了解的内容，默认由 Agent 选择类型，也可指定七种 UML 之一。提交后使用当前会话的 Agent（无会话时使用当前选择）创建独立应用会话，捕获当前代码并生成一张新图，不覆盖已有图或清空原会话草稿。成功后打开新标签；失败保留表单供重试，生成期间可停止或在会话中查看进度。
+
+“图管理”提供全部图、名称搜索和回收站，分页加载图摘要。每张图可打开、根据当前代码更新或删除；Tab 的“×”仅关闭标签。删除确认后移入回收站，活动标签及源码窗随之关闭；可恢复同一 ID、全部版本和源码快照，恢复不会自动打开标签。本次没有永久删除及自动清理。
+
+更新确认窗显示目标、当前版本、用途、关联文件变化和可选补充要求，点击“生成新版本”才调用 Agent。普通 UML 保留类型；旧版阅读图转换为合适的 UML 新版本，原阅读图继续保留在版本历史。失败、取消或并发版本冲突保留原版本；有效但未发布的草稿可在管理面板交给会话恢复。更新任务同时校验版本和生命周期，删除后再恢复也不会使删除前的旧任务获得发布资格。
+
+打开图／管理面板、窗口重新获得焦点、扫描后及页面可见时每 30 秒检查关联文件；重复文件在批量检查中合并。状态包括待检查、检查中、关联源码未变化、源码已变化、检查失败及分析器已变化。检查不调用模型，也不自动生成新版本。检测覆盖旧图的依据文件，“关联源码未变化”不是架构语义有效性的保证；新增模块等变化可随时主动要求更新。
+
+图集 API 增加 `state=active|trashed` 和 `q` 名称搜索；新增 `POST /api/explore/diagrams/{id}/trash`、`restore`，接收 `expectedRevision` 与 `lifecycleVersion`。消息接口可附 `diagramAction=create|update`、`diagramType=auto|七类类型`，指定更新时附图 ID、预期版本与生命周期版本；旧调用保持兼容。管理操作每轮只允许一张图，任务必须重新捕获源码。回收站不进入 Agent 默认活动图集；旧版本及快照不被改写。
+
 ## 完整源码与引用标记
 
 底部源码区可连续浏览文件首尾，不再用“上一段／下一段”替换正文。当前节点或连线在本文件中的全部依据会标记出来：当前选中范围使用深色背景和侧标，其他范围使用浅色。重叠范围合并，调用处、定义及端点补充依据保留原有类型，不从 AI 文案猜测行号。
@@ -140,3 +152,25 @@ npm --prefix assets/board-source run build
 ```
 
 `test_uml.py` 覆盖七类合约、共享／隔离、不可变版本、原子冲突、迁移、多调用处及修改／删除／移动。`test_uml_transport.py` 通过真实 MCP 桥和五种 CLI 适配器（无 LLM 的协议夹具）验证发布、显式更新、另建新图、失败和取消。浏览器验收见 [design-qa.md](../design-qa.md)。
+
+## 完整图种与双渲染（2026-10-30）
+
+新增图的自定义选择器按“流程、UML 结构、UML 行为、UML 交互”分组，支持 14 类 UML 和流程图、泳道图两个入口。组标题不能选择；方向键、Home/End、Enter 和 Escape 保持原有键盘操作。旧图仍按保存时的模型读取；新图使用 schemaVersion=2。
+
+- 泳道用 `lane` 节点与 `order` 排序，流程节点的 `parentId` 指向所属 lane；默认竖向分栏、自上而下。责任分区本身不是流程端点。
+- 对象可提供 `classifier`、`slots`；仅表达源码声明的构造和槽位，不是运行时实例快照。组合结构用 `structured-class`、`part`、`port`；端口必须归属分类器或部件，并指定 `portKind`，可选 `side`。
+- 通信消息提供唯一 `order`。定时图用 `signal` 容纳有序 `state-event`，默认逻辑顺序；提供真实 `time` 时必须同时有文档 `timeUnit`，且同信号时间递增。时间跨度超过画布预算时要求缩小范围。
+- Profile 使用显式 `profile`、`stereotype`、`metaclass`，`extension` 从 stereotype 指向 metaclass；不把普通语言注解自动解释为 UML Profile。交互概览的 `interaction` 节点提供有依据的 `interaction` 描述。
+
+`POST /api/explore/diagrams/{id}/render` 仍只接受 `{revision}`。原生类型返回 `renderer: "plantuml"`、清理后的 `svg`、`source`、元素映射和运行时版本；流程、组合结构、Profile、通信和交互概览返回 `renderer: "local-svg"`、已验证 `model` 和元素映射，由前端确定性布局并生成 SVG。活动和泳道仅在可无损转换时使用 PlantUML，否则返回本地 SVG 与原因。两条路径共用源码检查窗；本地类型不需要 Java。所有标准图均可导出 SVG；只有返回 `source` 的图提供 PlantUML 文本导出。缓存加入转换器与渲染器标识。源码证据、快照、项目隔离与版本冲突策略保持不变。
+
+可复现的 16 类示例：
+
+```sh
+python3 scripts/uml_demo.py /tmp/code-strata-uml-demo
+# 使用上一步输出的命令启动独立项目和历史库。
+```
+
+样例显式标为演示源码，不涉及用户项目，不发起模型请求。配置迁移保留真实 fixture 行号：L76 备份、L77 检查、L79 发布、L80 校验。其余类型依据 `notation.py`、`domain.py` 或部署配置声明。实际浏览器逐项结果见 `uml-browser-acceptance.json`。
+
+实现参考：[React Flow 节点数据](https://github.com/xyflow/xyflow/blob/main/packages/system/src/types/nodes.ts)、[Mermaid 泳道布局分层](https://github.com/mermaid-js/mermaid/blob/develop/packages/mermaid/src/diagrams/swimlanes/swimlanesDiagram.ts)、[标签参与布局](https://github.com/mermaid-js/mermaid/blob/develop/packages/mermaid/src/rendering-util/layout-algorithms/swimlanes/edgeLabelNodes.ts)、[PlantUML 泳道](https://plantuml.com/activity-diagram-beta)、[Papyrus 图种](https://eclipse.dev/papyrus/)。本轮采用架构思路参考，未复制这些项目源码，也未新增 Mermaid/X6/draw.io 依赖。PlantUML 私有发行包继续使用锁定版本和现有许可说明。

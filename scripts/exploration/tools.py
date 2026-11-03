@@ -1,5 +1,6 @@
 """Tool contracts and server-side graph validation. No AI-supplied call facts."""
 from .store import encoded
+from .diagram_types import KINDS
 
 
 def tool(name, description, properties, required=()):
@@ -42,15 +43,18 @@ RUN_TOOLS = [
 # canonical evidence, type-specific roles and all expected document revisions.
 UML_NODE = dict(type='object', additionalProperties=False, properties=dict(
     id=STRING, label=STRING, role=STRING, evidenceIds=dict(type='array', items=STRING, maxItems=30),
-    explanation=STRING, members=dict(type='array', items=STRING, maxItems=100), parentId=STRING),
+    explanation=STRING, members=dict(type='array', items=STRING, maxItems=100), parentId=STRING,
+    classifier=STRING, slots=dict(type='array',items=STRING,maxItems=100),
+    portKind=dict(type='string',enum=['provided','required','bidirectional']), side=dict(type='string',enum=['left','right','top','bottom']),
+    order=INTEGER,time=dict(type='number'),interaction=STRING),
     required=['id', 'label', 'role', 'evidenceIds', 'explanation'])
 UML_EDGE = dict(type='object', additionalProperties=False, properties=dict(
     id=STRING, source=STRING, target=STRING, role=STRING, label=STRING, guard=STRING,
     evidenceIds=dict(type='array', items=STRING, maxItems=30), explanation=STRING, order=INTEGER),
     required=['id', 'source', 'target', 'role', 'evidenceIds', 'explanation'])
 UML_DOCUMENT = dict(type='object', additionalProperties=False, properties=dict(
-    id=STRING, expectedRevision=INTEGER, type=dict(type='string', enum=['activity','sequence','class','component','state','usecase','deployment']),
-    title=STRING, purpose=STRING, explanation=STRING,
+    id=STRING, expectedRevision=INTEGER, type=dict(type='string', enum=list(KINDS)),
+    title=STRING, purpose=STRING, explanation=STRING, timeUnit=STRING,
     nodes=dict(type='array', items=UML_NODE, minItems=1, maxItems=100),
     edges=dict(type='array', items=UML_EDGE, maxItems=300)), required=['type','title','purpose','nodes','edges'])
 RUN_TOOLS += [

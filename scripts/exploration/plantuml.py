@@ -3,7 +3,8 @@ import hashlib
 import re
 import xml.etree.ElementTree as ET
 
-VERSION = 1
+VERSION = 2
+LOCAL_TYPES = {"flowchart", "composite", "profile", "communication", "interaction-overview"}
 
 
 class UnsupportedDiagram(ValueError):
@@ -17,7 +18,7 @@ def label(value):
 
 
 def serialize(model):
-    if model.get('type') not in ('activity', 'sequence', 'class', 'component', 'state', 'usecase', 'deployment'):
+    if model.get('type') not in ('activity','swimlane','sequence','class','object','package','component','state','usecase','deployment','timing'):
         raise UnsupportedDiagram('旧版阅读图请使用交互视图')
     if len(model['nodes']) > 100 or len(model['edges']) > 300:
         raise ValueError('图超过 100 节点／300 关系预算')
@@ -38,8 +39,21 @@ def serialize(model):
              'skinparam hyperlinkUnderline false', 'skinparam ArrowColor #7894B6',
              'skinparam roundcorner 8']
     kind = model['type']
-    if kind == 'activity':
+    if kind in ('activity','swimlane'):
         lines += activity(model, title)
+    elif kind == 'timing':
+        by_id = {n['id']: n for n in model['nodes']}
+        for n in model['nodes']:
+            if n['role'] == 'signal':
+                lines.append(f'concise "{title(n)}" as {aliases[n["id"]]}')
+        at = lambda n: n.get('time',n.get('order',0))
+        for n in sorted((n for n in model['nodes'] if n['role']=='state-event'),key=at):
+            lines += [f'@{at(n)}', f'{aliases[n["parentId"]]} is "{title(n)}"']
+        for e in sorted(model['edges'],key=lambda e:e.get('order',0)):
+            a,b=by_id[e['source']],by_id[e['target']]
+            if e['role']=='message':
+                lines += [f'@{at(a)}', f'{aliases[a["parentId"]]} -> {aliases[b["parentId"]]}@{at(b)} : {title(e)}']
+        lines.append('caption '+label('时间轴：'+model['timeUnit'] if model.get('timeUnit') else '逻辑顺序（非运行耗时）'))
     elif kind == 'sequence':
         for n in model['nodes']:
             role = n['role'] if n['role'] in ('actor', 'boundary', 'control', 'entity') else 'participant'
@@ -71,12 +85,13 @@ def serialize(model):
             keywords = {'system': 'rectangle', 'device': 'node', 'execution': 'node',
                         'choice': 'state', 'fork': 'state', 'join': 'state'}
             keyword = keywords.get(role, role)
-            if keyword not in ('class', 'interface', 'enum', 'package', 'note', 'component', 'state', 'actor', 'usecase', 'rectangle', 'node', 'artifact'):
+            if keyword not in ('class', 'interface', 'enum', 'package', 'note', 'component', 'state', 'actor', 'usecase', 'rectangle', 'node', 'artifact', 'object'):
                 raise UnsupportedDiagram('此元素暂不能无损转换为标准 UML：'+role)
             stereo = ' <<choice>>' if role == 'choice' else ' <<fork>>' if role == 'fork' else ' <<join>>' if role == 'join' else ' <<executionEnvironment>>' if role == 'execution' else ''
-            declaration = f'{keyword} "{label(n["label"])}" as {alias}{stereo} [[{link(n)}]]'
+            name = n['label'] + ((' : '+n['classifier']) if n.get('classifier') else '')
+            declaration = f'{keyword} "{label(name)}" as {alias}{stereo} [[{link(n)}]]'
             nested = children.get(n['id'], [])
-            members = n.get('members', [])
+            members = n.get('slots', n.get('members', []))
             if nested or members:
                 lines.append(declaration+' {')
                 for member in members:
@@ -88,8 +103,10 @@ def serialize(model):
                 lines.append(declaration)
         for n in children.get(None, []):
             emit(n)
+        for n in model['nodes']:
+            if n['role']=='object': lines.append(f'url of {aliases[n["id"]]} is [[{link(n)}]]')
         arrows = {'inheritance': '--|>', 'implementation': '..|>', 'composition': '*--', 'aggregation': 'o--',
-                  'dependency': '..>', 'include': '..>', 'extend': '..>', 'association': '--', 'communication': '--', 'transition': '-->', 'flow': '-->'}
+                  'link': '--', 'package-import': '..>', 'package-merge': '..>', 'dependency': '..>', 'include': '..>', 'extend': '..>', 'association': '--', 'communication': '--', 'transition': '-->', 'flow': '-->'}
         for e in model['edges']:
             a = '[*]' if by_id[e['source']]['role'] == 'start' else aliases[e['source']]
             b = '[*]' if by_id[e['target']]['role'] == 'end' else aliases[e['target']]
@@ -99,11 +116,19 @@ def serialize(model):
             caption = label(e.get('label') or '查看依据')
             if e.get('guard'):
                 caption = label('['+e['guard']+']')+' '+caption
-            if e['role'] in ('include', 'extend'):
-                caption = '<<'+e['role']+'>> '+caption
+            if e['role'] in ('include', 'extend', 'package-import', 'package-merge'):
+                caption = '<<'+e['role'].replace('package-','')+'>> '+caption
             # Linked captions work across state/component/deployment as well as
             # types; they also provide keyboard targets for otherwise bare edges.
             lines.append(f'{a} {arrow} {b} : [[{link(e)} {caption}]]')
+    # Native syntax does not link every pseudostate/timing interval. Keep an
+    # explicit accessible evidence index for those elements without inventing edges.
+    linked = set(mapping.values())
+    missing = [n for n in model['nodes']+model['edges'] if n['id'] not in linked]
+    if missing:
+        lines.append('legend bottom')
+        lines += [title(n) for n in missing]
+        lines.append('endlegend')
     lines.append('@enduml')
     return dict(source='\n'.join(lines)+'\n', elements=mapping, converterVersion=VERSION)
 
@@ -114,8 +139,9 @@ def activity(model, title):
     A failed structural proof is a visible unsupported state, not permission to
     redraw an arbitrary graph as a different execution order.
     """
-    nodes = {n['id']: n for n in model['nodes']}
-    if any(n.get('parentId') or n['role'] == 'note' for n in model['nodes']):
+    lanes = {n['id']: n for n in model['nodes'] if n['role']=='lane'}
+    nodes = {n['id']: n for n in model['nodes'] if n['role']!='lane'}
+    if any((n.get('parentId') and n['parentId'] not in lanes) or n['role'] == 'note' for n in nodes.values()):
         raise UnsupportedDiagram('此活动图的注释／嵌套范围暂不能无损转换，请使用交互视图')
     outgoing, incoming = {k: [] for k in nodes}, {k: [] for k in nodes}
     for e in model['edges']:
@@ -147,6 +173,8 @@ def activity(model, title):
             if k in rendered:
                 raise UnsupportedDiagram('活动图存在非结构化回边，请使用交互视图')
             n, links = nodes[k], outgoing[k]
+            if lanes and n.get('parentId') in lanes:
+                result.append('|'+label(lanes[n['parentId']]['label'])+'|')
             rendered.add(k)
             if n['role'] in ('decision', 'fork'):
                 if len(links) != 2 and n['role'] == 'decision' or len(links) < 2:
@@ -231,3 +259,13 @@ def sanitize_svg(raw, elements):
                 del parent.attrib[key]
     ET.register_namespace('', 'http://www.w3.org/2000/svg')
     return ET.tostring(root, encoding='unicode')
+
+
+def render_projection(model):
+    if model.get('type') in LOCAL_TYPES:
+        return dict(renderer='local-svg', model=model, elements={n['id']:n['id'] for n in model['nodes']+model['edges']}, source=None, converterVersion=VERSION)
+    try:
+        return dict(serialize(model), renderer='plantuml')
+    except UnsupportedDiagram as exc:
+        if model.get('type') not in ('activity','swimlane'): raise
+        return dict(renderer='local-svg', model=model, elements={n['id']:n['id'] for n in model['nodes']+model['edges']}, source=None, reason=str(exc), converterVersion=VERSION)

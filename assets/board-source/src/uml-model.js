@@ -1,5 +1,7 @@
 import { sourceGroups } from './source-tags.js';
-export const UML_TYPES = { activity: '活动图', sequence: '时序图', class: '类图', component: '组件图', state: '状态图', usecase: '用例图', deployment: '部署图', legacy: '旧版阅读图' };
+import { TYPE_OPTIONS, CONTROL_TYPES, nodeMembers } from './notation.js';
+import { swimlaneProjection, timingProjection, communicationProjection, compositeProjection, finishProjection } from './uml-special-layout.js';
+export const UML_TYPES = { ...Object.fromEntries(TYPE_OPTIONS.map(o=>[o.value,o.label])), legacy:'旧版阅读图' };
 export const tabKey = project => 'code-strata:uml:' + project;
 export const normalizeTagMode = value => ['full', 'expanded'].includes(value) ? 'full' : 'simple';
 export const versionKey = diagram => `${diagram.id}:${diagram.revision}`;
@@ -24,7 +26,7 @@ export function selectionFiles(model, element) {
 export function freshnessText(check) {
   if (!check) return '待检查源码变化';
   const labels = { modified: '已修改', deleted: '已删除', error: '无法检查' };
-  return [check.analyzerChanged ? '分析器已变化，需重新分析' : '', ...check.files.filter(f => f.status !== 'current').map(f => `${f.path} · ${labels[f.status]}`)].filter(Boolean).join('\n') || '关联源码未变化';
+  return [check.analyzerChanged ? '分析器已变化，需重新分析' : '', ...(check.files||[]).filter(f => f.status !== 'current').map(f => `${f.path} · ${labels[f.status]}`)].filter(Boolean).join('\n') || check.message || (check.status==='checking'?'正在检查关联源码':'关联源码未变化');
 }
 export function requestGate() {
   let serial = 0;
@@ -32,7 +34,7 @@ export function requestGate() {
 }
 
 export function edgeText(edge) {
-  return [edge.guard ? `[${edge.guard}]` : '', ['include','extend','create','destroy'].includes(edge.role) ? `«${edge.role}»` : '', edge.label,
+  return [edge.guard ? `[${edge.guard}]` : '', ['include','extend','create','destroy','package-import','package-merge'].includes(edge.role) ? `«${edge.role.replace('package-','')}»` : '', edge.communication ? `${edge.order}: ${edge.label||'消息'}` : edge.label,
     edge.status === 'candidate' && !edge.label?.includes('候选') ? '候选' : edge.status === 'unresolved' && !edge.label?.includes('未解析') ? '未解析' : ''].filter(Boolean).join(' ');
 }
 export function routedPath(sections) {
@@ -50,6 +52,7 @@ export function readableViewport(nodes, viewport, frame, selectedId) {
 }
 
 export function nodeSize(node, type, tagMode = 'simple') {
+  if (node.role==='port') return {width:100,height:50};
   if (['start', 'end'].includes(node.role)) return { width: 30, height: 30 };
   if (node.role === 'merge') return { width: 36, height: 36 };
   if (['fork', 'join'].includes(node.role)) return { width: 110, height: 10 };
@@ -58,7 +61,10 @@ export function nodeSize(node, type, tagMode = 'simple') {
   if (['decision', 'choice', 'merge'].includes(node.role)) return { width: count?190:116, height: 88+extra };
   if (node.role === 'actor') return { width: count?220:140, height: 104+extra };
   const width = count ? 280 : type === 'sequence' ? 210 : node.role === 'usecase' ? 210 : 220;
-  return { width, height: Math.max(70, 56 + (node.members?.length || 0) * 22)+extra };
+  const columns=Math.max(8,Math.floor((width-24)/8));
+  const titleRows=Math.max(1,Math.ceil(((node.label||'')+(node.classifier||'')).length/columns));
+  const memberRows=nodeMembers(node).reduce((sum,m)=>sum+Math.max(1,Math.ceil(m.length/columns)),0);
+  return { width, height: Math.max(70, 42 + titleRows*19 + memberRows*22)+extra };
 }
 
 // Sequence diagrams use message order, not a dependency layout: each message
@@ -91,6 +97,11 @@ export function wrapActivity(projection, model) {
 }
 
 export async function umlProjection(model, tagMode = 'simple', measured = {}) {
+  const size=n=>measured.nodes?.get(n.id)||nodeSize(n,model.type,tagMode);
+  if(model.type==='composite') {const base=await umlProjection({...model,type:'component'},tagMode,measured);return finishProjection(compositeProjection(base),model,measured);}
+  if(model.type==='swimlane')return finishProjection(swimlaneProjection(model,size),model,measured);
+  if(model.type==='timing')return finishProjection(timingProjection(model,size),model,measured);
+  if(model.type==='communication')return finishProjection(communicationProjection(model,size),model,measured);
   if (model.type === 'sequence') return sequenceProjection(model,tagMode,measured);
   const { default: ELK } = await import('elkjs/lib/elk.bundled.js');
   const elk = new ELK();
@@ -104,7 +115,7 @@ export async function umlProjection(model, tagMode = 'simple', measured = {}) {
     else roots.push(shape);
   }
   const graph = await elk.layout({ id: 'root', layoutOptions: {
-    'elk.algorithm': 'layered', 'elk.direction': model.type === 'activity' || model.type === 'state' ? 'DOWN' : 'RIGHT',
+    'elk.algorithm': 'layered', 'elk.direction': CONTROL_TYPES.has(model.type) ? 'DOWN' : 'RIGHT',
     'elk.hierarchyHandling': 'INCLUDE_CHILDREN', 'elk.edgeRouting': 'ORTHOGONAL',
     'elk.spacing.nodeNode': '56', 'elk.layered.spacing.nodeNodeBetweenLayers': '90',
     'elk.spacing.edgeEdge':'24', 'elk.spacing.edgeNode':'20', 'elk.spacing.edgeLabel':'10',
@@ -124,7 +135,7 @@ export async function umlProjection(model, tagMode = 'simple', measured = {}) {
   const sorted = [];
   function add(node) { if (sorted.includes(node)) return; if (node.parentId) add(model.nodes.find(n => n.id === node.parentId)); sorted.push(node); }
   model.nodes.forEach(add);
-  return wrapActivity({ nodes: sorted.map(n => { const pos = positions.get(n.id); return { id: n.id, type: 'uml', parentId: n.parentId, extent: n.parentId ? 'parent' : undefined,
+  return finishProjection(wrapActivity({ nodes: sorted.map(n => { const pos = positions.get(n.id); return { id: n.id, type: 'uml', parentId: n.parentId, extent: n.parentId ? 'parent' : undefined,
     position: { x: pos.x, y: pos.y }, width: pos.width, height: pos.height, style: { width: pos.width, height: pos.height, zIndex: containers.has(n.id) ? -1 : 1 },
-    data: { node: n, container: containers.has(n.id), diagramType: model.type, headerHeight:containers.has(n.id)?sizes.get(n.id).height:undefined,headerWidth:containers.has(n.id)?sizes.get(n.id).width:undefined } }; }), edges: model.edges.map(e=>({...e,route:routes.get(e.id)})) }, model);
+    data: { node: n, container: containers.has(n.id), diagramType: model.type, headerHeight:containers.has(n.id)?sizes.get(n.id).height:undefined,headerWidth:containers.has(n.id)?sizes.get(n.id).width:undefined } }; }), edges: model.edges.map(e=>({...e,route:routes.get(e.id)})) }, model),model,measured);
 }

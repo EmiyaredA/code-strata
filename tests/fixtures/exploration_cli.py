@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import re
 
 args = sys.argv[1:]
 mode = os.environ.get('STRATA_EXPLORATION_FIXTURE', 'success')
@@ -59,6 +60,12 @@ def tools():
                 target = call('get_diagram', dict(diagramId=os.environ['STRATA_EXPLORATION_DIAGRAM']))
                 docs = docs[:1]
                 docs[0].update(id=target['id'],expectedRevision=target['revision'])
+            if mode.startswith('uml_single'):
+                docs=docs[:1]
+                match=re.search(r'本轮关联图：(.*)',globals().get('prompt',''))
+                target=json.loads(match[1]) if match else None
+                if target:
+                    docs[0].update(id=target['id'],expectedRevision=target['expectedRevision'])
             call('save_diagrams', dict(diagrams=docs))
         elif mode == 'invalid':
             view['relations'] = ['fabricated-call']
@@ -68,9 +75,9 @@ def tools():
             call('save_view', view)
         child.stdin.close()
         child.wait(timeout=3)
-    if mode in ('hold', 'uml_hold'):
+    if mode in ('hold', 'uml_hold', 'uml_single_hold'):
         time.sleep(30)
-    if mode in ('failure', 'uml_failure'):
+    if mode in ('failure', 'uml_failure', 'uml_single_failure'):
         raise RuntimeError('failure after graph draft')
 
 

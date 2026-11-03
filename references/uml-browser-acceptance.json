@@ -1,0 +1,98 @@
+[
+  {
+    "title": "配置迁移 · 安全发布",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "保存配置 · 交互顺序",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "配置对象 · 类型关系",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "保存配置 · 职责组件",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "保存配置 · 状态变化",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "配置工具 · 使用目标",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "本地工具 · 部署结构",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "保存配置 · package",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "保存配置 · object",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "保存配置 · communication",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "配置迁移 · flowchart",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "配置迁移 · swimlane",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "配置迁移 · interaction-overview",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "保存配置 · 组合结构",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "源码标记 · Profile",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  },
+  {
+    "title": "保存配置 · 逻辑定时",
+    "interactive": true,
+    "standard": true,
+    "source": true
+  }
+]

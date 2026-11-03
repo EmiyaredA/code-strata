@@ -1,3 +1,4 @@
+import { localStandardSvg } from './standard-svg.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Minus, Plus, Maximize, LoaderCircle } from 'lucide-react';
 import { explorationApi as api } from './exploration-api.js';
@@ -12,10 +13,10 @@ export function StandardUml({ document: doc, model, state, onState, onSelect, se
   useEffect(()=>{const controller=new AbortController();let timer;
     setRender(null);setError('');setBusy(true);
     async function read(){try{
-      const status=await api('/api/explore/uml-runtime',undefined,controller.signal);setRuntime(status);
-      if(status.status==='installing'){timer=setTimeout(read,1000);return;}
-      if(status.status!=='ready'){setBusy(false);return;}
-      const result=await api(`/api/explore/diagrams/${doc.id}/render`,{revision:doc.revision},controller.signal);
+      let result;
+      try {result=await api(`/api/explore/diagrams/${doc.id}/render`,{revision:doc.revision},controller.signal);}
+      catch(e){const status=await api('/api/explore/uml-runtime',undefined,controller.signal);if(controller.signal.aborted)return;setRuntime(status);if(status.status==='installing'){timer=setTimeout(read,1000);return;}if(status.status!=='ready'){setBusy(false);return;}throw e;}
+      if(result.renderer==='local-svg')result={...result,svg:await localStandardSvg(result.model)};
       if(!controller.signal.aborted){setRender(result);setBusy(false);}
     }catch(e){if(!controller.signal.aborted){setError(e.message);setBusy(false);}}}
     read();return()=>{controller.abort();clearTimeout(timer);};
@@ -46,7 +47,7 @@ export function StandardUml({ document: doc, model, state, onState, onSelect, se
     onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}}>
     {render?<><div className="standard-uml-image" ref={image} style={{transform:`translate(${viewport.x}px,${viewport.y}px) scale(${viewport.zoom})`}}
       onClick={choose} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){choose(e);}}} dangerouslySetInnerHTML={{__html:markup}}/>
-      <div className="standard-uml-controls"><button aria-label="缩小标准图" onClick={()=>move({...viewport,zoom:Math.max(.1,viewport.zoom/1.2)})}><Minus size={15}/></button><span>{Math.round(viewport.zoom*100)}%</span><button aria-label="放大标准图" onClick={()=>move({...viewport,zoom:Math.min(3,viewport.zoom*1.2)})}><Plus size={15}/></button><button aria-label="适应标准图" onClick={()=>fit()}><Maximize size={15}/></button><button onClick={()=>save('svg',render.svg,'image/svg+xml')}><Download size={14}/>SVG</button><button onClick={()=>save('puml',render.source,'text/plain;charset=utf-8')}>PlantUML</button></div>
+      <div className="standard-uml-controls"><button aria-label="缩小标准图" onClick={()=>move({...viewport,zoom:Math.max(.1,viewport.zoom/1.2)})}><Minus size={15}/></button><span>{Math.round(viewport.zoom*100)}%</span><button aria-label="放大标准图" onClick={()=>move({...viewport,zoom:Math.min(3,viewport.zoom*1.2)})}><Plus size={15}/></button><button aria-label="适应标准图" onClick={()=>fit()}><Maximize size={15}/></button><button onClick={()=>save('svg',render.svg,'image/svg+xml')}><Download size={14}/>SVG</button>{render.source?<button onClick={()=>save('puml',render.source,'text/plain;charset=utf-8')}>PlantUML</button>:<span title={render.reason||'此类型使用本地标准 SVG，无法无损导出 PlantUML'}>本地 SVG · 无 PlantUML 导出</span>}</div>
     </>:<div className="uml-empty">{busy?<><LoaderCircle className="spin"/>{runtime?.status==='installing'?<><strong>{runtime.phase}</strong><span>{runtime.total?Math.round(runtime.received/runtime.total*100)+'%':'正在准备本地依赖…'}</span></>:'正在渲染标准 UML…'}</>:<><strong>{error||runtime?.message||'标准 UML 需要本地渲染运行时'}</strong><p>Java 21 与 PlantUML 安装在应用私有目录，安装后离线渲染。</p>{runtime?.status!=='ready'?<button className="button" onClick={install} disabled={runtime?.status==='unsupported'}>{runtime?.status==='failed'?'重试安装':'安装本地渲染运行时'}</button>:<button className="button" onClick={()=>setRetry(n=>n+1)}>重试渲染</button>}<small>可随时切回交互视图；不会调用模型。</small></>}</div>}
   </div>;
 }

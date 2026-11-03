@@ -11,25 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 
-KINDS = ('activity', 'sequence', 'class', 'component', 'state', 'usecase', 'deployment')
-ROLES = {
-    'activity': {'action', 'decision', 'merge', 'start', 'end', 'fork', 'join', 'note'},
-    'sequence': {'participant', 'actor', 'boundary', 'control', 'entity', 'note'},
-    'class': {'class', 'interface', 'enum', 'package', 'note'},
-    'component': {'component', 'interface', 'package', 'note'},
-    'state': {'state', 'choice', 'start', 'end', 'fork', 'join', 'note'},
-    'usecase': {'actor', 'usecase', 'system', 'note'},
-    'deployment': {'device', 'execution', 'artifact', 'component', 'note'},
-}
-EDGE_ROLES = {'flow', 'message', 'return', 'async', 'create', 'destroy', 'association', 'dependency',
-              'inheritance', 'implementation', 'composition', 'aggregation', 'transition', 'include', 'extend', 'communication'}
-EDGE_TYPES = {
-    'activity': {'flow'}, 'sequence': {'message','return','async','create','destroy'},
-    'class': {'association','dependency','inheritance','implementation','composition','aggregation'},
-    'component': {'association','dependency','implementation','composition','aggregation','communication'},
-    'state': {'transition','flow'}, 'usecase': {'association','include','extend','inheritance'},
-    'deployment': {'communication','dependency','association','composition'},
-}
+from .diagram_types import KINDS, ROLES, EDGE_TYPES, EDGE_ROLES, CONTAINERS, NODE_FIELDS, node_details, validate_notation
 DECORATIVE = {'start', 'end', 'fork', 'join', 'merge'}
 
 
@@ -78,9 +60,11 @@ def source_evidence(store, run_id, snapshot_id, source):
     return identifier
 
 
-def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, require_target=False):
+def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, require_target=False, operation=None, diagram_type=None, lifecycles=None):
     if not isinstance(args, dict) or set(args) != {'diagrams'} or not isinstance(args['diagrams'], list) or not 1 <= len(args['diagrams']) <= 12:
         raise ValueError('每轮提交 1–12 张 UML 图')
+    if operation and len(args['diagrams']) != 1:
+        raise ValueError('图管理每次只生成或更新一张图')
     facts = {**store.facts(run_id, 'node'), **store.facts(run_id, 'relation')}
     files, results, updates = {}, [], set()
 
@@ -114,14 +98,25 @@ def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, re
         return result
 
     for value in args['diagrams']:
-        if not isinstance(value, dict) or set(value) - {'id', 'expectedRevision', 'type', 'title', 'purpose', 'nodes', 'edges', 'explanation'}:
+        if not isinstance(value, dict) or set(value) - {'id', 'expectedRevision', 'type', 'title', 'purpose', 'nodes', 'edges', 'explanation', 'timeUnit'}:
             raise ValueError('UML 图字段无效')
         kind = value.get('type')
         if kind not in KINDS:
             raise ValueError('不支持的 UML 类型')
         identifier, expected = value.get('id'), value.get('expectedRevision')
+        if operation == 'create' and (identifier or expected is not None):
+            raise ValueError('新增操作不能覆盖已有图')
+        if operation == 'update' and (not target or identifier != target['id']):
+            raise ValueError('更新必须提交指定图')
+        required_type = target['model']['type'] if operation == 'update' and target['model']['type'] != 'legacy' else diagram_type
+        if required_type and required_type != 'auto' and kind != required_type:
+            raise ValueError('图类型与指定类型不一致')
+        lifecycle = 0
         if identifier:
-            store.diagram(project, identifier)
+            current = store.diagram(project, identifier)
+            lifecycle = target['lifecycleVersion'] if target and 'lifecycleVersion' in target else (lifecycles or {}).get(identifier, current['lifecycleVersion'])
+            if lifecycles is not None and identifier not in lifecycles:
+                raise DiagramConflict('该图不在任务开始时的活动图集中，请重新读取')
             if type(expected) is not int or expected < 1:
                 raise ValueError('更新必须提供 expectedRevision')
             if identifier in updates:
@@ -134,12 +129,15 @@ def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, re
         nodes, edges = value.get('nodes'), value.get('edges')
         if not isinstance(nodes, list) or not 1 <= len(nodes) <= 100 or not isinstance(edges, list) or len(edges) > 300:
             raise ValueError('每图最多 100 个节点、300 条关系，请缩小范围')
-        model = dict(schemaVersion=1, type=kind, title=text(value.get('title'), '图名'),
+        model = dict(schemaVersion=2, type=kind, title=text(value.get('title'), '图名'),
                      purpose=text(value.get('purpose'), '用途', 1000), explanation=text(value.get('explanation', ''), '图说明', 16000, True),
                      nodes=[], edges=[], snapshotId=snapshot_id, runId=run_id)
+        if value.get("timeUnit"):
+            if kind != "timing": raise ValueError("仅定时图支持时间单位")
+            model["timeUnit"] = text(value["timeUnit"], "时间单位", 20)
         by_id = {}
         for node in nodes:
-            if not isinstance(node, dict) or set(node) - {'id', 'label', 'role', 'evidenceIds', 'explanation', 'members', 'parentId'}:
+            if not isinstance(node, dict) or set(node) - ({'id', 'label', 'role', 'evidenceIds', 'explanation', 'members', 'parentId'} | NODE_FIELDS):
                 raise ValueError('UML 节点字段无效')
             nid = text(node.get('id'), '节点 ID', 100)
             if nid in by_id or node.get('role') not in ROLES[kind]:
@@ -151,6 +149,7 @@ def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, re
             clean = dict(id=nid, label=text(node.get('label', ''), '节点名称', 300, node['role'] in DECORATIVE), role=node['role'],
                          evidence=refs, basis='inferred', explanation=text(node.get('explanation', ''), '节点解释', 8000, node['role'] in DECORATIVE),
                          members=[text(m, '成员', 300) for m in members])
+            node_details(node, kind, clean, text)
             if node.get('parentId'):
                 clean['parentId'] = text(node['parentId'], '分组 ID', 100)
             model['nodes'].append(clean)
@@ -162,7 +161,7 @@ def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, re
                     raise ValueError('容器分组不存在或形成循环')
                 seen.add(parent)
                 parent = by_id[parent].get('parentId')
-        containers = {'class': {'package'}, 'component': {'package','component'}, 'deployment': {'device','execution'}, 'usecase': {'system'}}
+        containers = CONTAINERS
         for node in model['nodes']:
             if node.get('parentId') and by_id[node['parentId']]['role'] not in containers.get(kind, set()):
                 raise ValueError('此 UML 类型或节点角色不支持容器分组')
@@ -181,7 +180,7 @@ def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, re
             order = relation.get('order', index)
             if type(order) is not int or not 0 <= order <= 10000:
                 raise ValueError('消息顺序无效')
-            if kind == 'sequence' and order in orders:
+            if kind in ('sequence','communication') and order in orders:
                 raise ValueError('时序消息的 order 必须唯一')
             orders.add(order)
             clean = dict(id=eid, source=source['id'], target=dest['id'], role=relation.get('role', 'flow'),
@@ -197,6 +196,7 @@ def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, re
             if any(r['status'] in ('candidate', 'unresolved') for r in refs):
                 clean['status'] = 'unresolved' if any(r['status'] == 'unresolved' for r in refs) else 'candidate'
             model['edges'].append(clean)
+        validate_notation(model)
         all_refs = [r for n in model['nodes'] + model['edges'] for r in n['evidence']]
         if not all_refs:
             raise ValueError('图必须有可追溯的源码依据')
@@ -204,7 +204,7 @@ def validate_diagrams(store, run_id, snapshot_id, project, args, target=None, re
         for item in model['nodes'] + model['edges']:
             if not item['evidence']:
                 item['evidence'] = model['evidence']
-        results.append(dict(id=identifier or uuid.uuid4().hex, expectedRevision=expected, model=model))
+        results.append(dict(id=identifier or uuid.uuid4().hex, expectedRevision=expected, lifecycleVersion=lifecycle, model=model))
     if require_target and target and not any(x['id'] == target['id'] for x in results):
         raise ValueError('本轮要求更新指定图，提交内容没有包含该图')
     return results
@@ -221,21 +221,27 @@ class DiagramStore:
                 CREATE TABLE IF NOT EXISTS diagram_versions(diagram_id TEXT NOT NULL, revision INTEGER NOT NULL,
                     snapshot_id TEXT NOT NULL, conversation_id TEXT, run_id TEXT, created_at TEXT NOT NULL, payload TEXT NOT NULL,
                     PRIMARY KEY(diagram_id,revision));
+                CREATE TABLE IF NOT EXISTS diagram_lifecycle(diagram_id TEXT PRIMARY KEY,
+                    generation INTEGER NOT NULL DEFAULT 0, deleted_at TEXT);
                 CREATE TABLE IF NOT EXISTS diagram_drafts(run_id TEXT PRIMARY KEY, project TEXT NOT NULL,
                     created_at TEXT NOT NULL, payload TEXT NOT NULL);
             ''')
             for conv in db.execute('SELECT * FROM conversations WHERE view_json IS NOT NULL').fetchall():
                 self._import_legacy(db, dict(conv))
+            db.execute('INSERT OR IGNORE INTO diagram_lifecycle(diagram_id) SELECT id FROM diagrams')
 
     def _import_legacy(self, db, conv):
         view = json.loads(conv['view_json'])
         if not view:
             return
         identifier = uuid.uuid5(uuid.NAMESPACE_URL, 'strata-legacy:' + conv['id']).hex
+        life = db.execute('SELECT deleted_at FROM diagram_lifecycle WHERE diagram_id=?', (identifier,)).fetchone()
+        if life and life['deleted_at']:
+            return
         old = db.execute('SELECT current_revision FROM diagrams WHERE id=?', (identifier,)).fetchone()
         if old:
             payload = json.loads(db.execute('SELECT payload FROM diagram_versions WHERE diagram_id=? AND revision=?', (identifier, old[0])).fetchone()[0])
-            if payload.get('runId') == view.get('runId'):
+            if payload.get('type') != 'legacy' or payload.get('runId') == view.get('runId'):
                 return
         model = dict(schemaVersion=1, type='legacy', title=view['title'], purpose=view.get('explanation') or '旧版阅读图，保留原始关系及源码快照。',
                      explanation=view.get('explanation', ''), snapshotId=view['snapshotId'], runId=view['runId'], legacy=view, nodes=[], edges=[], evidence=[])
@@ -250,7 +256,7 @@ class DiagramStore:
             db.execute('UPDATE diagrams SET current_revision=?,updated_at=? WHERE id=?', (revision, created, identifier))
         db.execute('INSERT INTO diagram_versions VALUES(?,?,?,?,?,?,?)', (identifier, revision, view['snapshotId'], conv['id'], view['runId'], created, dumps(model)))
 
-    def diagram(self, project, identifier, revision=None):
+    def diagram(self, project, identifier, revision=None, include_deleted=False):
         if not isinstance(identifier, str) or not re.fullmatch('[a-f0-9]{32}', identifier):
             raise ValueError('图 ID 无效')
         if revision is not None and (type(revision) is not int or revision < 1):
@@ -259,24 +265,56 @@ class DiagramStore:
             row = db.execute('SELECT * FROM diagrams WHERE id=? AND project=?', (identifier, project)).fetchone()
             if not row:
                 raise LookupError('图不存在或不属于当前项目')
-            result = dict(row)
+            life = db.execute('SELECT generation,deleted_at FROM diagram_lifecycle WHERE diagram_id=?', (identifier,)).fetchone()
+            if life and life['deleted_at'] and not include_deleted:
+                raise LookupError('图已移入回收站，请先恢复')
+            result = dict(row, lifecycleVersion=life['generation'] if life else 0, deletedAt=life['deleted_at'] if life else None)
             version = db.execute('SELECT * FROM diagram_versions WHERE diagram_id=? AND revision=?', (identifier, revision or row['current_revision'])).fetchone()
             if not version:
                 raise LookupError('图版本不存在')
             result.update(revision=version['revision'], model=json.loads(version['payload']), snapshotId=version['snapshot_id'], conversationId=version['conversation_id'])
             return result
 
-    def list_diagrams(self, project, offset=0, limit=50):
+    def list_diagrams(self, project, offset=0, limit=50, state='active', query=''):
         if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError('图列表分页参数无效')
+        if state not in ('active', 'trashed') or not isinstance(query, str) or len(query) > 200:
+            raise ValueError('图列表筛选无效')
         with self.connect() as db:
-            rows = db.execute('SELECT d.*,v.payload FROM diagrams d JOIN diagram_versions v ON v.diagram_id=d.id AND v.revision=d.current_revision WHERE d.project=? ORDER BY d.updated_at,d.id LIMIT ? OFFSET ?', (project, limit + 1, offset)).fetchall()
+            rows = db.execute("""SELECT d.*,v.payload,COALESCE(l.generation,0) AS generation,l.deleted_at
+                FROM diagrams d JOIN diagram_versions v ON v.diagram_id=d.id AND v.revision=d.current_revision
+                LEFT JOIN diagram_lifecycle l ON l.diagram_id=d.id
+                WHERE d.project=? AND ((?='active' AND l.deleted_at IS NULL) OR (?='trashed' AND l.deleted_at IS NOT NULL))
+                AND instr(lower(json_extract(v.payload,'$.title')),lower(?))>0
+                ORDER BY d.updated_at,d.id LIMIT ? OFFSET ?""", (project,state,state,query,limit+1,offset)).fetchall()
         items = []
         for row in rows[:limit]:
             model = json.loads(row['payload'])
             items.append(dict(id=row['id'], revision=row['current_revision'], title=model['title'], type=model['type'], purpose=model['purpose'],
-                snapshotId=model['snapshotId'], updatedAt=row['updated_at'], originConversation=row['origin_conversation'], runId=model.get('runId')))
+                snapshotId=model['snapshotId'], updatedAt=row['updated_at'], originConversation=row['origin_conversation'], runId=model.get('runId'),
+                lifecycleVersion=row['generation'], deletedAt=row['deleted_at']))
         return dict(diagrams=items, nextOffset=offset + limit if len(rows) > limit else None)
+
+    def diagram_lifecycles(self, project):
+        with self.connect() as db:
+            return {r['id']:r['generation'] for r in db.execute("""SELECT d.id,COALESCE(l.generation,0) AS generation
+                FROM diagrams d LEFT JOIN diagram_lifecycle l ON l.diagram_id=d.id
+                WHERE d.project=? AND l.deleted_at IS NULL""", (project,))}
+
+    def set_diagram_deleted(self, project, identifier, expected_revision, expected_lifecycle, deleted):
+        self.diagram(project, identifier, include_deleted=True)
+        if type(expected_revision) is not int or type(expected_lifecycle) is not int:
+            raise ValueError('请提供图版本和生命周期版本')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT current_revision FROM diagrams WHERE id=? AND project=?', (identifier,project)).fetchone()
+            db.execute('INSERT OR IGNORE INTO diagram_lifecycle(diagram_id) VALUES(?)', (identifier,))
+            life = db.execute('SELECT * FROM diagram_lifecycle WHERE diagram_id=?', (identifier,)).fetchone()
+            if row['current_revision'] != expected_revision or life['generation'] != expected_lifecycle:
+                raise DiagramConflict('图状态已变化，请刷新后重试')
+            if bool(life['deleted_at']) != deleted:
+                db.execute('UPDATE diagram_lifecycle SET generation=generation+1,deleted_at=? WHERE diagram_id=?', (stamp() if deleted else None,identifier))
+        return self.diagram(project, identifier, include_deleted=True)
 
     def diagram_versions(self, project, identifier):
         self.diagram(project, identifier)
@@ -299,6 +337,9 @@ class DiagramStore:
             if value['expectedRevision'] is not None:
                 if not row or row['project'] != project or row['current_revision'] != value['expectedRevision']:
                     raise DiagramConflict('图已被另一会话更新；草稿已保留，请重新读取最新图后重试')
+                life = db.execute('SELECT generation,deleted_at FROM diagram_lifecycle WHERE diagram_id=?', (value['id'],)).fetchone()
+                if life and (life['deleted_at'] or life['generation'] != value.get('lifecycleVersion', 0)):
+                    raise DiagramConflict('图已被删除或恢复；原版本与草稿已保留，请重新发起更新')
             elif row:
                 raise DiagramConflict('新图 ID 冲突；草稿已保留')
         for value in values:
@@ -307,6 +348,7 @@ class DiagramStore:
                 db.execute('INSERT INTO diagrams VALUES(?,?,?,?,?,?,NULL)', (value['id'], project, revision, created, created, run['conversation_id']))
             else:
                 db.execute('UPDATE diagrams SET current_revision=?,updated_at=? WHERE id=?', (revision, created, value['id']))
+            db.execute('INSERT OR IGNORE INTO diagram_lifecycle(diagram_id) VALUES(?)', (value['id'],))
             db.execute('INSERT INTO diagram_versions VALUES(?,?,?,?,?,?,?)', (value['id'], revision, value['model']['snapshotId'], run['conversation_id'], run['id'], created, dumps(value['model'])))
         db.execute('DELETE FROM diagram_drafts WHERE run_id=?', (run['id'],))
 

@@ -59,7 +59,7 @@ class UmlTests(unittest.TestCase):
         return values
 
     def test_seven_types_project_shared_and_old_versions_immutable(self):
-        docs=self.publish([example(kind,self.ev) for kind in KINDS])
+        docs=self.publish([example(kind,self.ev) for kind in ('activity','sequence','class','component','state','usecase','deployment')])
         self.assertEqual(len(self.store.list_diagrams(str(self.project))['diagrams']),7)
         other=self.store.create(str(self.project),'claude','另一会话')['id']
         run,ev=self.begin(other)

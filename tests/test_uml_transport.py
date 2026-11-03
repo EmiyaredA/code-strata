@@ -16,6 +16,66 @@ class UmlTransportTests(unittest.TestCase):
     wait = helpers.ExplorationTests.wait
     run_agent = helpers.ExplorationTests.run_agent
 
+    def test_management_single_create_and_update_capture_current_snapshot(self):
+        identifier=self.create()
+        with patch.dict(os.environ,{'STRATA_EXPLORATION_FIXTURE':'uml_single'}):
+            self.api(f'/api/explore/conversations/{identifier}/messages',dict(text='新增活动图',diagramAction='create',diagramType='activity'))
+            first=self.wait(identifier)
+        self.assertEqual(first['run']['status'],'completed',first['run'])
+        doc=self.api('/api/explore/diagrams')['diagrams'][0]
+        path=self.project/'main.py';path.write_text('# new implementation\n'+path.read_text())
+        with patch.dict(os.environ,{'STRATA_EXPLORATION_FIXTURE':'uml_single'}):
+            self.api(f'/api/explore/conversations/{identifier}/messages',dict(text='更新活动图',diagramAction='update',diagramType='auto',diagramId=doc['id'],expectedRevision=1,lifecycleVersion=0))
+            updated=self.wait(identifier)
+        self.assertEqual(updated['run']['status'],'completed',updated['run'])
+        latest=self.api('/api/explore/diagrams/'+doc['id'])
+        self.assertEqual(latest['revision'],2);self.assertNotEqual(latest['snapshotId'],doc['snapshotId'])
+        # Creating again in a previously bound conversation also captures a fresh snapshot.
+        path.write_text('# another addition\n'+path.read_text())
+        with patch.dict(os.environ,{'STRATA_EXPLORATION_FIXTURE':'uml_single'}):
+            self.api(f'/api/explore/conversations/{identifier}/messages',dict(text='另画新图',diagramAction='create',diagramType='auto'))
+            created=self.wait(identifier)
+        self.assertEqual(created['run']['status'],'completed',created['run'])
+        docs=self.api('/api/explore/diagrams')['diagrams']
+        self.assertEqual(len(docs),2);self.assertNotEqual(docs[-1]['snapshotId'],latest['snapshotId'])
+
+    def test_management_failure_and_invalid_multiple_submission_keep_original(self):
+        identifier=self.create()
+        for mode in ('uml_single_failure','uml'):
+            with patch.dict(os.environ,{'STRATA_EXPLORATION_FIXTURE':mode}):
+                self.api(f'/api/explore/conversations/{identifier}/messages',dict(text='新增一张图',diagramAction='create',diagramType='auto'))
+                result=self.wait(identifier)
+            self.assertEqual(result['run']['status'],'failed')
+            self.assertEqual(self.api('/api/explore/diagrams')['diagrams'],[])
+
+    def test_management_lifecycle_conflicts_and_authenticated_trash(self):
+        identifier=self.create();self.run_agent(identifier,mode='uml')
+        doc=self.api('/api/explore/diagrams')['diagrams'][0];base='/api/explore/diagrams/'+doc['id']
+        with self.assertRaises(HTTPError) as caught:
+            self.api(base+'/trash',dict(expectedRevision=1,lifecycleVersion=0),token='wrong')
+        self.assertEqual(caught.exception.code,403);caught.exception.close()
+        self.api(base+'/trash',dict(expectedRevision=1,lifecycleVersion=0))
+        self.api(base+'/restore',dict(expectedRevision=1,lifecycleVersion=1))
+        with self.assertRaises(HTTPError) as caught:
+            self.api(f'/api/explore/conversations/{identifier}/messages',dict(text='旧确认更新',diagramAction='update',diagramId=doc['id'],expectedRevision=1,lifecycleVersion=0))
+        self.assertEqual(caught.exception.code,409);caught.exception.close()
+
+    def test_management_cancel_after_single_draft_publishes_nothing(self):
+        identifier=self.create()
+        with patch.dict(os.environ,{'STRATA_EXPLORATION_FIXTURE':'uml_single_hold'}):
+            started=self.api(f'/api/explore/conversations/{identifier}/messages',dict(text='新增一张图',diagramAction='create',diagramType='auto'))
+            deadline=time.monotonic()+10
+            while time.monotonic()<deadline:
+                with self.server.exploration.store.connect() as db:
+                    pending=db.execute('SELECT 1 FROM diagram_drafts WHERE run_id=?',(started['id'],)).fetchone()
+                if pending:break
+                time.sleep(.03)
+            self.assertTrue(pending)
+            self.api(f'/api/explore/conversations/{identifier}/cancel',{})
+            result=self.wait(identifier)
+        self.assertEqual(result['run']['status'],'cancelled')
+        self.assertEqual(self.api('/api/explore/diagrams')['diagrams'],[])
+
     def test_all_five_native_transports_publish_project_shared_uml(self):
         for agent in ('codex', 'opencode', 'dsh', 'claude', 'pi'):
             with self.subTest(agent=agent):

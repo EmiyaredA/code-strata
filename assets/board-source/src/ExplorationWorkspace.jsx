@@ -146,8 +146,27 @@ export function ExplorationWorkspace({ data, entry, active, drawer, SourceDialog
     } catch (e) { if (current.current.project === atProject && selectionEpoch.current === epoch) setError(e.message); }
     finally { setSending(false); }
   }
+  async function launchDiagram({question, operation, diagramType, target}) {
+    if (sending) throw new Error('正在启动任务，请稍后重试');
+    const atProject = project, chosenAgent = conversation?.agent_id || agent;
+    setSending(true); onRunStart?.();
+    try {
+      const created = await api('/api/explore/conversations', {agentId:chosenAgent,title:question.slice(0,45)});
+      if (current.current.project !== atProject) throw new Error('项目已切换，请在目标项目重新发起');
+      const started = await api(`/api/explore/conversations/${created.id}/messages`, {
+        text:question, diagramAction:operation, diagramType,
+        ...(target ? {diagramId:target.id,expectedRevision:target.revision,lifecycleVersion:target.lifecycleVersion} : {})
+      });
+      if (current.current.project === atProject) {
+        initiatedRun.current = started.id;
+        choose(created.id);
+      }
+      return {conversationId:created.id,runId:started.id};
+    } finally {setSending(false);}
+  }
   useEffect(() => {
-    if (requestRef) requestRef.current = async ({question, update = false, prepare = false}) => {
+    if (requestRef) requestRef.current = async ({question, update = false, prepare = false, operation, diagramType, target}) => {
+      if (operation) return launchDiagram({question,operation,diagramType,target});
       if (prepare) { editText(question); return; }
       return send(update, question);
     };

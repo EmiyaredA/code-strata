@@ -13,7 +13,7 @@ import threading
 import urllib.request
 import zipfile
 
-from .plantuml import serialize, sanitize_svg, VERSION
+from .plantuml import serialize, render_projection, sanitize_svg, VERSION
 
 LOCK = json.loads(Path(__file__).with_name('uml-runtime-lock.json').read_text())
 
@@ -147,12 +147,18 @@ class UmlRuntime:
                 self.install_state = dict(status='failed', message=str(exc)[:500])
 
     def render(self, document):
-        projection = serialize(document['model'])
-        key = (document['id'], document['revision'], document['snapshotId'], VERSION, LOCK['plantuml']['version'])
+        projection = render_projection(document['model'])
+        key = (document['id'], document['revision'], document['snapshotId'], VERSION, projection['renderer'], LOCK['plantuml']['version'])
         with self.lock:
             if key in self.cache:
                 self.cache.move_to_end(key)
                 return dict(self.cache[key], cached=True)
+        if projection['renderer']=='local-svg':
+            result = dict(**projection, rendererVersion='local-svg-'+str(VERSION), revision=document['revision'], cached=False)
+            with self.lock:
+                self.cache[key]=result
+                while len(self.cache)>32: self.cache.popitem(last=False)
+            return result
         java, jar = self.executables()
         if not self.slots.acquire(timeout=1):
             raise ValueError('标准 UML 正在渲染其他图，请稍后重试')

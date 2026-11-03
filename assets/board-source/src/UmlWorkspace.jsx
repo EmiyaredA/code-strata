@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelLeftClose, PanelLeftOpen, Link2, X, List, History, RefreshCw, Info, LoaderCircle, GitBranch, MessageSquare, FileClock, ChevronDown } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Link2, X, List, History, RefreshCw, Info, LoaderCircle, GitBranch, MessageSquare, FileClock, ChevronDown, Plus } from 'lucide-react';
+import { DiagramManager, DiagramActionDialog } from './DiagramManager.jsx';
+import { reconcileDiagramTabs } from './diagram-management.js';
 import { Tree } from './CodeTree.jsx';
 import { parents } from './model.js';
 import { SnapshotSource } from './SnapshotSource.jsx';
@@ -19,7 +21,7 @@ function saved(project) {try{return JSON.parse(localStorage.getItem(tabKey(proje
 function SourceInspector({source, height, setHeight, onClose, onEvidence, readPage, onQuestion, onCitation, check, sourceMap, retryMap}) {
   const ref=useRef(null), drag=useRef(null), viewer=useRef(null);
   const [visible,setVisible]=useState({start:0,end:0,total:0});
-  useEffect(()=>{const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();onClose();}};document.addEventListener('keydown',key,true);return()=>document.removeEventListener('keydown',key,true);},[onClose]);
+  useEffect(()=>{const key=e=>{if(e.key==='Escape'&&!document.querySelector('.uml-action-dialog,.uml-manager')){e.preventDefault();e.stopImmediatePropagation();onClose();}};document.addEventListener('keydown',key,true);return()=>document.removeEventListener('keydown',key,true);},[onClose]);
   const evidence=source.refs[source.index||0],stops=referenceStops(source.refs,source.path);
   const stop=stops.findIndex(r=>r.start===evidence?.startLine&&r.end===evidence?.endLine);
   const identity=sourceIdentity(source),view=visible.identity===identity?visible:{start:0,end:0,total:0};
@@ -34,7 +36,7 @@ function SourceInspector({source, height, setHeight, onClose, onEvidence, readPa
     <SourceTags refs={source.refs} mode="expanded" onChoose={ref=>onEvidence(source.refs.findIndex(r=>sameEvidence(r,ref)))}/>
     {sourceMap?.status&&sourceMap.status!=='ready'&&<div className="uml-source-map-status" role="status">{sourceMap.status==='building'?'正在索引快照中的函数归属…':sourceMap.message}{sourceMap.status==='failed'&&<button className="text-button" onClick={retryMap}>重试函数索引</button>}</div>}
     {!!source?.refs?.length&&source.refs.length>1&&<div className="uml-evidence-tabs" aria-label="源码依据位置">{source.refs.map((r,i)=><button key={`${r.path}:${r.startLine}:${i}`} aria-pressed={i===source.index} onClick={()=>onEvidence(i)} title={r.path}>{r.origin==='endpoint'?'端点补充 · ':''}{locationLabel(r)} · {r.symbol?.name||r.path.split('/').at(-1)}:{r.startLine}</button>)}</div>}
-    {check&&(check.status!=='current'||check.analyzerChanged)&&<div className="uml-source-warning"><FileClock size={13}/><span>代码已变化或无法验证，当前显示生成时源码。</span><small title={freshnessText(check)}>{freshnessText(check)}</small></div>}
+    {check&&(['stale','error'].includes(check.status)||check.analyzerChanged)&&<div className="uml-source-warning"><FileClock size={13}/><span>代码已变化或无法验证，当前显示生成时源码。</span><small title={freshnessText(check)}>{freshnessText(check)}</small></div>}
     <div className="uml-inspector-columns"><SnapshotSource key={sourceIdentity(source)} ref={viewer} source={source} readPage={(start,end,signal)=>readPage(source,start,end,signal)} onStatus={status}/>
     <aside className="uml-ai-explanation"><strong><MessageSquare size={15}/>AI 解释</strong><Markdown text={source?.element?.explanation||'这处源码尚无单独的 AI 解释，可携带所选位置在会话中追问。'} onSource={onCitation}/>
       <small className="uml-inference-label">{source?.element?.basis==='analyzer'?'关系来自分析器；文字为 AI 解读':'依据源码整理 · 不代表实际运行轨迹'}</small>
@@ -50,6 +52,7 @@ export function UmlWorkspace({ data, drawer, renderChat, onRefresh, busy, source
   const project=data.project.root;
   const [catalog,setCatalog]=useState([]),[tabs,setTabs]=useState({tabs:[],active:null}),[diagram,setDiagram]=useState(null);
   const [version,setVersion]=useState(null),[versions,setVersions]=useState([]),[listOpen,setListOpen]=useState(false),[historyOpen,setHistoryOpen]=useState(false),[drafts,setDrafts]=useState([]);
+  const [action,setAction]=useState(null),[managerItems,setManagerItems]=useState([]);
   const [error,setError]=useState(''),[loading,setLoading]=useState(false),[checks,setChecks]=useState({});
   const [expanded,setExpanded]=useState(new Set()),[directoryOpen,setDirectoryOpen]=useState(()=>{try{return localStorage.getItem('strata:uml:directory')!=='false';}catch{return true;}}),[directoryWidth,setDirectoryWidth]=useState(240),[narrow,setNarrow]=useState(false);
   const [source,setSource]=useState(null),[sheetHeight,setSheetHeight]=useState(400),[selection,setSelection]=useState(null),[uiTick,setUiTick]=useState(0);
@@ -65,7 +68,7 @@ export function UmlWorkspace({ data, drawer, renderChat, onRefresh, busy, source
   const currentState=states.current[key]||{};
 
   useEffect(()=>{loadSerial.current.invalidate();ready.current=false;seen.current=null;preferences.current=saved(project);states.current=preferences.current?.states||{};
-    setTabs({tabs:[],active:null});setCatalog([]);setDiagram(null);setSource(null);setSelection(null);setChecks({});setVersion(null);setVersions([]);setError('');setExpanded(new Set());setListOpen(false);setHistoryOpen(false);
+    setTabs({tabs:[],active:null});setCatalog([]);setDiagram(null);setSource(null);setSelection(null);setChecks({});setVersion(null);setVersions([]);setError('');setExpanded(new Set());setListOpen(false);setHistoryOpen(false);setAction(null);setManagerItems([]);
     setTagMode(normalizeTagMode(preferences.current?.tagMode));setViewMode(preferences.current?.viewMode==='standard'?'standard':'interactive');setSourceMap(null);
   },[project]);
   const refreshCatalog=useCallback(async()=>{
@@ -75,7 +78,11 @@ export function UmlWorkspace({ data, drawer, renderChat, onRefresh, busy, source
     if(projectRef.current!==project)return [];
     setCatalog(all);
     if(!ready.current){const restored=restoreTabs(preferences.current,all);if(!preferences.current&&all.length){restored.tabs=[all.at(-1).id];restored.active=all.at(-1).id;}setTabs(restored);ready.current=true;}
-    else {const incoming=all.filter(d=>!seen.current?.has(d.id)).map(d=>d.id);if(incoming.length)setTabs(old=>({tabs:[...new Set([...old.tabs,...incoming])],active:old.active||incoming[0]}));}
+    else {
+      const incoming=all.filter(d=>!seen.current?.has(d.id)&&!d.lifecycleVersion).map(d=>d.id);
+      setTabs(old=>{const next=reconcileDiagramTabs(old,all);return incoming.length?{tabs:[...new Set([...next.tabs,...incoming])],active:next.active||incoming[0]}:next;});
+      const available=new Set(all.map(d=>d.id));for(const stateKey of Object.keys(states.current))if(!available.has(stateKey.split(':')[0]))delete states.current[stateKey];
+    }
     seen.current=new Set(all.map(d=>d.id));return all;
   },[project]);
   useEffect(()=>{if(!project)return;let disposed=false,timer;async function poll(){try{await refreshCatalog();}catch(e){if(!disposed&&projectRef.current===project)setError(e.message);}if(!disposed)timer=setTimeout(poll,4000);}poll();return()=>{disposed=true;clearTimeout(timer);};},[refreshCatalog]);
@@ -106,12 +113,18 @@ export function UmlWorkspace({ data, drawer, renderChat, onRefresh, busy, source
     return()=>controller.abort();
   },[project,tabs.active,activeSummary?.revision,version]);
   useEffect(()=>{if(!host.current)return;const observer=new ResizeObserver(([entry])=>setNarrow(entry.contentRect.width-directoryWidth<720));observer.observe(host.current);return()=>observer.disconnect();},[directoryWidth]);
+  const checkItems=[...new Map([...managerItems,...tabs.tabs.map(id=>catalog.find(x=>x.id===id)).filter(Boolean)].map(d=>[d.id,d])).values()];
+  const checkKey=checkItems.map(d=>`${d.id}:${d.revision}:${d.lifecycleVersion||0}`).join(',');
   useEffect(()=>{
-    if(!project||!tabs.tabs.length)return;let disposed=false,running=false;const controller=new AbortController();
-    async function inspect(){if(running||document.hidden)return;running=true;try{const next={},result=await api('/api/explore/diagrams/check',{diagrams:tabs.tabs.map(id=>catalog.find(x=>x.id===id)).filter(Boolean).slice(0,100).map(d=>({id:d.id,revision:d.revision}))},controller.signal);for(const item of result.checks)next[`${item.id}:${item.revision}`]=item;if(!disposed&&projectRef.current===project)setChecks(old=>({...old,...next}));}catch(e){if(!disposed&&e.name!=='AbortError')setError(e.message);}finally{running=false;}}
-    inspect();const timer=setInterval(inspect,30000);window.addEventListener('focus',inspect);document.addEventListener('visibilitychange',inspect);
-    return()=>{disposed=true;controller.abort();clearInterval(timer);window.removeEventListener('focus',inspect);document.removeEventListener('visibilitychange',inspect);};
-  },[project,tabs.tabs.join(','),catalog.map(d=>`${d.id}:${d.revision}`).join(','),data.snapshot.id]);
+    if(!project||!checkItems.length)return;let disposed=false,running=false;const controller=new AbortController();
+    async function inspect(){if(running||globalThis.document.hidden)return;running=true;
+      setChecks(old=>({...old,...Object.fromEntries(checkItems.map(d=>[`${d.id}:${d.revision}`,{...old[`${d.id}:${d.revision}`],status:'checking'}]))}));
+      try{const next={};for(let at=0;at<checkItems.length;at+=100){const result=await api('/api/explore/diagrams/check',{diagrams:checkItems.slice(at,at+100).map(d=>({id:d.id,revision:d.revision}))},controller.signal);for(const item of result.checks)next[`${item.id}:${item.revision}`]=item;}
+        if(!disposed&&projectRef.current===project)setChecks(old=>({...old,...next}));
+      }catch(e){if(!disposed&&e.name!=='AbortError')setChecks(old=>({...old,...Object.fromEntries(checkItems.map(d=>[`${d.id}:${d.revision}`,{status:'error',files:[],message:e.message}]))}));}finally{running=false;}}
+    inspect();const timer=setInterval(inspect,30000);window.addEventListener('focus',inspect);globalThis.document.addEventListener('visibilitychange',inspect);
+    return()=>{disposed=true;controller.abort();clearInterval(timer);window.removeEventListener('focus',inspect);globalThis.document.removeEventListener('visibilitychange',inspect);};
+  },[project,checkKey,data.snapshot.id]);
   useEffect(()=>{setSource(null);},[diagram?.id,diagram?.revision]);
   useEffect(()=>{if(!diagram||!version)return;const controller=new AbortController();api(`/api/explore/diagrams/${diagram.id}/check`,{revision:version},controller.signal).then(result=>setChecks(old=>({...old,[versionKey(diagram)]:result}))).catch(()=>{});return()=>controller.abort();},[diagram?.id,version]);
 
@@ -143,17 +156,17 @@ export function UmlWorkspace({ data, drawer, renderChat, onRefresh, busy, source
   const files=source?.refs?.map(r=>r.path)||elementEvidence(model||{nodes:[]},selection).map(r=>r.path)||[],primary=source?.refs?.[source.index||0]?.path||files[0];
   const linked=useMemo(()=>new Set(files),[files.join('|')]);
   const known=new Set((data.inventory||data.files).map(f=>f.id));
-  const deleted=check?.files.filter(f=>f.status==='deleted').map(f=>f.path)||[];
+  const deleted=check?.files?.filter(f=>f.status==='deleted').map(f=>f.path)||[];
   const historic=[...new Set((model?.evidence||[]).map(r=>r.path))].filter(p=>!known.has(p)||deleted.includes(p));
   useEffect(()=>()=>{loadSerial.current.invalidate();},[]);
   useEffect(()=>{if(narrow)setDirectoryOpen(false);},[narrow]);
   function closeSource(){setSource(null);requestAnimationFrame(()=>{const prior=sourceReturnFocus.current;const target=host.current.querySelector('.standard-uml')||(prior?.isConnected&&prior!==document.body&&!host.current?.querySelector('.uml-inspector')?.contains(prior)?prior:[...host.current.querySelectorAll('.standard-uml-image [data-element]')].find(el=>el.dataset.element===selection?.id)||host.current.querySelector('.uml-node.is-selected'));target?.focus({preventScroll:true});});}
   function ask(question){drawer.setOpen(true);chatRequest.current?.({question,prepare:true});}
-  async function update(){drawer.setOpen(true);await chatRequest.current?.({question:`请根据当前代码更新 UML「${model.title}」，保留其类型与用途，并说明变化。`,update:true});}
+  function update(){if(diagram)setAction({kind:'update',item:{id:diagram.id,title:model.title,purpose:model.purpose,type:model.type,revision:diagram.current_revision}});}
   function activate(id){interaction.current++;setTabs(old=>({tabs:[...new Set([...old.tabs,id])],active:id}));setVersion(null);setListOpen(false);}
   async function openList(){setListOpen(v=>!v);setHistoryOpen(false);try{const result=await api('/api/explore/diagrams/drafts');setDrafts(result.drafts);}catch(e){setError(e.message);}}
   async function openHistory(){setHistoryOpen(v=>!v);setListOpen(false);try{const result=await api(`/api/explore/diagrams/${diagram.id}/versions`);if(diagramRef.current?.id===diagram.id)setVersions(result.versions);}catch(e){setError(e.message);}}
-  async function generated(ids){await refreshCatalog();setTabs(old=>({tabs:[...new Set([...old.tabs,...ids])],active:runInteraction.current===interaction.current?ids[0]||old.active:old.active}));}
+  async function generated(ids){const atProject=project;const all=await refreshCatalog();if(projectRef.current!==atProject)return;ids=ids.filter(id=>all.some(d=>d.id===id));setTabs(old=>({tabs:[...new Set([...old.tabs,...ids])],active:runInteraction.current===interaction.current?ids[0]||old.active:old.active}));}
   const context=diagram?{id:diagram.id,expectedRevision:diagram.current_revision,title:model.title,snapshotId:diagram.snapshotId}:null;
   return <div className={`uml-workspace ${narrow?'is-narrow':''} ${directoryOpen?'directory-open':'directory-closed'}`} ref={host} style={{'--uml-directory-width':`${directoryWidth}px`}}>
     {directoryOpen&&narrow&&<button className="uml-directory-scrim" aria-label="收起目录" onClick={()=>setDirectoryOpen(false)}/>}
@@ -167,13 +180,11 @@ export function UmlWorkspace({ data, drawer, renderChat, onRefresh, busy, source
     <main className="uml-main">
       <div className="uml-tabs-bar"><button className="icon-button uml-directory-toggle" aria-label={directoryOpen?'收起项目目录':'展开项目目录'} onClick={()=>setDirectoryOpen(v=>!v)}><PanelLeftOpen size={16}/></button>
         <div className="uml-tabs" role="tablist" aria-label="项目 UML 图">{tabs.tabs.map(id=>{const item=catalog.find(d=>d.id===id);if(!item)return null;const changed=checks[`${id}:${item.revision}`];return <div className={`uml-tab ${tabs.active===id?'is-active':''}`} key={id}>
-          <button role="tab" id={'tab-'+id} aria-controls="uml-tab-panel" aria-selected={tabs.active===id} onClick={()=>activate(id)} onKeyDown={e=>{const at=tabs.tabs.indexOf(id);if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?tabs.tabs[0]:e.key==='End'?tabs.tabs.at(-1):tabs.tabs[(at+(e.key==='ArrowRight'?1:tabs.tabs.length-1))%tabs.tabs.length];activate(next);document.getElementById('tab-'+next)?.focus();}}} title={item.purpose}><span>{item.title}</span><small>{UML_TYPES[item.type]}</small>{changed&&(changed.status!=='current'||changed.analyzerChanged)&&<FileClock className="uml-tab-stale" size={13} aria-label="源码或分析器有变化"/>}</button>
+          <button role="tab" id={'tab-'+id} aria-controls="uml-tab-panel" aria-selected={tabs.active===id} onClick={()=>activate(id)} onKeyDown={e=>{const at=tabs.tabs.indexOf(id);if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const next=e.key==='Home'?tabs.tabs[0]:e.key==='End'?tabs.tabs.at(-1):tabs.tabs[(at+(e.key==='ArrowRight'?1:tabs.tabs.length-1))%tabs.tabs.length];activate(next);document.getElementById('tab-'+next)?.focus();}}} title={item.purpose}><span>{item.title}</span><small>{UML_TYPES[item.type]}</small>{changed&&(['stale','error'].includes(changed.status)||changed.analyzerChanged)&&<FileClock className="uml-tab-stale" size={13} aria-label="源码或分析器有变化"/>}</button>
           <button className="uml-tab-close" aria-label={'关闭标签 '+item.title} onClick={()=>{interaction.current++;setTabs(old=>closeTab(old,id));}}><X size={13}/></button></div>;})}</div>
-        <div className="uml-tab-tools"><button className="icon-button" title="项目图列表（关闭标签不会删除图）" aria-label="项目图列表" aria-expanded={listOpen} onClick={openList}><List size={17}/></button>{diagram&&<button className="icon-button" title="图版本" aria-label="图版本" aria-expanded={historyOpen} onClick={openHistory}><History size={16}/></button>}<button className="icon-button" title="重新扫描项目" aria-label="重新扫描项目" disabled={busy} onClick={onRefresh}><RefreshCw size={15} className={busy?'spin':''}/></button></div>
+        <div className="uml-tab-tools"><button className="icon-button" aria-label="新增图" title="新增图" disabled={!project||busy} onClick={()=>setAction({kind:'create'})}><Plus size={17}/></button><button className="icon-button" title="图管理（关闭标签不会删除图）" aria-label="图管理" aria-expanded={listOpen} onClick={openList}><List size={17}/></button>{diagram&&<button className="icon-button" title="图版本" aria-label="图版本" aria-expanded={historyOpen} onClick={openHistory}><History size={16}/></button>}<button className="icon-button" title="重新扫描项目" aria-label="重新扫描项目" disabled={busy} onClick={onRefresh}><RefreshCw size={15} className={busy?'spin':''}/></button></div>
       </div>
-      {listOpen&&<section className="uml-document-menu" aria-label="项目图列表"><header><strong>项目共享图集</strong><button className="icon-button" aria-label="关闭图列表" onClick={()=>setListOpen(false)}><X size={15}/></button></header>{catalog.map(d=><button key={d.id} onClick={()=>activate(d.id)}><strong>{d.title}<small>{UML_TYPES[d.type]} · v{d.revision}</small></strong><span>{d.purpose}</span></button>)}{!catalog.length&&<p>在右侧会话描述想了解的内容，Agent 会生成 UML。</p>}
-        {!!drafts.length&&<details><summary>未发布草稿（{drafts.length}）</summary>{drafts.map(d=><div key={d.runId}>{d.diagrams.map(x=><p key={x.id}>{x.model.title} · {UML_TYPES[x.model.type]}</p>)}<button onClick={()=>{ask(`请调用 get_diagram_draft 读取草稿，再读取项目图集最新版本并重新查询源码，恢复任务 ${d.runId} 的未发布 UML 草稿。`);}}>在会话中恢复</button><details><summary>查看草稿数据</summary><pre>{JSON.stringify(d.diagrams,null,2)}</pre></details></div>)}</details>}
-      </section>}
+      {listOpen&&<DiagramManager key={project} project={project} refreshKey={catalog.map(d=>`${d.id}:${d.revision}:${d.lifecycleVersion}`).join(',')} checks={checks} onItems={setManagerItems} onOpen={activate} onAction={setAction} onClose={()=>setListOpen(false)} drafts={drafts} onDraft={runId=>ask(`请调用 get_diagram_draft 读取草稿，再读取最新图和源码，恢复任务 ${runId} 的未发布 UML 草稿。`)}/>}
       {historyOpen&&<section className="uml-document-menu" aria-label="图版本列表"><header><strong>图版本</strong><button className="icon-button" aria-label="关闭版本列表" onClick={()=>setHistoryOpen(false)}><X size={15}/></button></header>{versions.map(v=><button key={v.revision} onClick={()=>{setSource(null);setVersion(v.revision===diagram.current_revision?null:v.revision);setHistoryOpen(false);}}><strong>v{v.revision}{v.revision===diagram.current_revision?' · 最新':''}</strong><span>{new Date(v.createdAt).toLocaleString('zh-CN')} · {v.snapshotId.slice(0,8)}</span></button>)}</section>}
       <div className="uml-purpose"><Info size={15}/><strong>用途</strong><span title={model?.purpose}>{model?.purpose||'通过会话生成 UML，再沿图中节点与连线查看源码依据。'}</span>{diagram&&<button className={`text-button uml-freshness ${check?.status==='stale'?'is-stale':''}`} title={freshnessText(check)} onClick={update} disabled={loading||Boolean(version&&version!==diagram.current_revision)}><FileClock size={14}/>{version&&version!==diagram.current_revision?`历史 v${version}`:check?.status==='stale'?'源码有变化 · 更新':check?.analyzerChanged?'重新分析':'根据当前代码更新'}</button>}</div>
       {model&&model.type!=='legacy'&&<div className="uml-view-toolbar"><div className="uml-segmented" role="group" aria-label="UML 视图">{[['interactive','交互视图'],['standard','标准 UML']].map(([value,label])=><button key={value} aria-pressed={viewMode===value} onClick={()=>setViewMode(value)}>{label}</button>)}</div>{viewMode==='interactive'&&<><span>源码标签</span><div className="uml-segmented" role="group" aria-label="源码标签显示">{[['simple','精简'],['full','完整']].map(([value,label])=><button key={value} aria-pressed={tagMode===value} onClick={()=>setTagMode(value)}>{label}</button>)}</div></>}</div>}
@@ -183,6 +194,7 @@ export function UmlWorkspace({ data, drawer, renderChat, onRefresh, busy, source
       </section>
       {source&&<SourceInspector source={source} height={sheetHeight} setHeight={setSheetHeight} onClose={closeSource} onEvidence={index=>loadSource({...source,index,focusLine:undefined})} readPage={readSourcePage} onQuestion={ask} onCitation={node=>{const line=node.range?.start?.[0]||1;const existing=citationEvidence(source.refs,node.path,line);loadSource(existing>=0?{...source,index:existing,focusLine:line,directoryPath:undefined}:{...source,refs:[...source.refs,{path:node.path,startLine:line,endLine:node.range?.end?.[0]||line,locationKind:'source',navigationOnly:true,navigationKind:'citation'}],index:source.refs.length,focusLine:line,directoryPath:undefined});}} check={check} sourceMap={sourceMap} retryMap={()=>setMapRetry(n=>n+1)}/>}
     </main>
+    {action&&<DiagramActionDialog key={`${project}:${action.kind}:${action.item?.id||'new'}`} action={action} project={project} onClose={()=>setAction(null)} onChanged={refreshCatalog} onComplete={generated} onLaunch={async request=>{drawer.setOpen(true);if(!chatRequest.current)throw new Error('会话尚未准备完成，请稍后重试');return chatRequest.current(request);}}/>}
     {renderChat({chatOnly:true,diagramContext:context,requestRef:chatRequest,onRunStart:()=>{runInteraction.current=interaction.current;},onDiagrams:generated,onExternalSource:(node,conversationId,snapshotId)=>loadSource({refs:[{path:node.path,startLine:node.range?.start?.[0]||1,endLine:node.range?.end?.[0]||node.range?.start?.[0]||1}],index:0,element:{label:node.path},conversationId,snapshotId})})}
   </div>;
 }

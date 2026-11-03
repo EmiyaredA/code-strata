@@ -83,12 +83,12 @@ export function SelectMenu({ label, value, options, onChange, disabled = false, 
     </button>
     {open && position && createPortal(<div ref={popup} id={id} role="listbox" aria-label={label}
       className={`stats-select-popup ${popupClassName}`} style={position} onMouseDown={(event) => event.preventDefault()}>
-      {options.map((option, index) => <div key={option.value} id={`${id}-${index}`} role="option"
+      {options.map((option, index) => <React.Fragment key={option.value}>{option.group&&option.group!==options[index-1]?.group&&<div className="stats-select-group" role="presentation">{option.group}</div>}<div id={`${id}-${index}`} role="option"
         aria-selected={option.value === value} className={index === active ? "is-active" : ""}
         onPointerMove={() => setActive(index)} onClick={() => choose(option)}>
         <span>{option.icon}{option.label}</span>{option.detail != null && <small>{option.detail}</small>}
         {option.value === value ? <Check size={14} /> : <span className="stats-select-check-space" />}
-      </div>)}
+      </div></React.Fragment>)}
     </div>, trigger.current?.closest('[role="dialog"]') || document.body)}
   </>;
 }

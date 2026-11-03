@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create an isolated, deterministic seven-type UML demo; never calls a model.
+"""Create an isolated, deterministic sixteen-type UML demo; never calls a model.
 
 The migration fixture preserves the real source's line numbers. Other examples
 use a small executable domain model, not claims about the user's application.
@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 
 from exploration.store import Store
+from uml_examples import NOTATION_SOURCE, examples
 from exploration.snapshots import capture
 from exploration.diagrams import source_evidence, validate_diagrams
 
@@ -63,19 +64,20 @@ def seed(folder):
     path = project / 'backend/fpl_config/migration.py'
     path.parent.mkdir(parents=True)
     shutil.copyfile(Path(__file__).resolve().parents[1] / 'tests/fixtures/uml_migration.py', path)
+    (project/'notation.py').write_text(NOTATION_SOURCE)
     db = folder / 'history.sqlite3'
     store = Store(db)
     sid, data, context = capture(project)
     store.save_snapshot(sid, str(project), data, context)
-    conv = store.create(str(project), 'codex', '七种 UML 交互示例（确定性样例，无模型请求）')['id']
-    run = store.start(conv, '根据样例源码展示七种 UML；配置迁移只聚焦加锁后的发布路径。')
+    conv = store.create(str(project), 'codex', '十六种 UML 交互示例（确定性样例，无模型请求）')['id']
+    run = store.start(conv, '根据样例源码展示十六种 UML；配置迁移只聚焦加锁后的发布路径。')
     store.bind(run, sid)
 
     def ev(file, start, end=None):
         return source_evidence(store, run, sid, store.source(sid, file, start, end or start))
 
     migration = 'backend/fpl_config/migration.py'
-    refs = {line: ev(migration, line) for line in (63, 64, 69, 70, 72, 76, 77, 79, 80, 83, 84, 86)}
+    refs = {line: ev(migration, line) for line in (63, 64, 69, 70, 72, 76, 77, 78, 79, 80, 83, 84, 86)}
     refs[63] = ev(migration, 63, 65)
     refs[69] = ev(migration, 69, 72)
     refs[83] = ev(migration, 83, 84)
@@ -137,9 +139,13 @@ def seed(folder):
     node(d,'artifact','domain.py','artifact',[domain,deployment],'包含 CLI、服务与内存存储。',parentId='runtime')
     # Containment is sufficient; do not invent a network link between nested objects.
 
-    values=validate_diagrams(store,run,sid,str(project),dict(diagrams=docs))
+    notation=ev('notation.py',1,len(NOTATION_SOURCE.splitlines()))
+    docs += [d for d in examples(notation,refs) if d['type'] not in {d['type'] for d in docs}]
+    values=[]
+    for offset in range(0,len(docs),12):
+        values += validate_diagrams(store,run,sid,str(project),dict(diagrams=docs[offset:offset+12]))
     store.save_diagram_draft(run,str(project),values)
-    store.assistant(conv,run,'已载入七种 UML 确定性示例。所有节点绑定样例源码；本任务未调用模型。')
+    store.assistant(conv,run,'已载入十六种 UML 确定性示例。所有节点绑定样例源码；本任务未调用模型。')
     store.finish(run,'completed',diagrams=values)
     return project,db
 
